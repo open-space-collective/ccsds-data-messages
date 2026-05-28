@@ -5,7 +5,7 @@ from .omm import OrbitMeanElementsMessage
 from .oem import OEM
 from .oem import OrbitEphemerisMessage
 from .ocm import OCM
-from .ocm import OrbitCoordinateMessage
+from .ocm import OrbitComprehensiveMessage
 from .types import CCSDSDataMessage
 
 __all__ = [
@@ -16,6 +16,6 @@ __all__ = [
     "OEM",
     "OrbitEphemerisMessage",
     "OCM",
-    "OrbitCoordinateMessage",
+    "OrbitComprehensiveMessage",
     "CCSDSDataMessage",
 ]

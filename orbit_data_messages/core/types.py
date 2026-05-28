@@ -1,7 +1,3 @@
-from .omm import OMM
-from .oem import OEM
-from .opm import OPM
-from .ocm import OCM
+from orbit_data_messages.models.base import CCSDSDataMessage
 
-
-CCSDSDataMessage = OMM | OEM | OPM | OCM
+__all__ = ["CCSDSDataMessage"]
