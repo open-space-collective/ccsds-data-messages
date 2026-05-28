@@ -1,4 +1,18 @@
-class Metadata:
+class Delineation:
+
+    def __init__(
+        self,
+        start: str,
+        stop: str,
+    ):
+        self.start = start
+        self.stop = stop
+
+    def __str__(self) -> str:
+        return f"{self.start} / {self.stop}"
+
+
+class FieldMetadata:
 
     def __init__(
         self,
