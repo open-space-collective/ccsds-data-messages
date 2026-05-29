@@ -1,0 +1,43 @@
+site_name: CCSDS ODM
+site_description: Python implementation of the CCSDS 502.0-B-3 Orbit Data Message standard.
+docs_dir: docs
+theme:
+  name: readthedocs
+  highlightjs: true
+  hljs_languages:
+    - yaml
+    - python
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_category_heading: true
+            members_order: source
+            inherited_members: false
+            filters:
+              - "!^_"          # hide private by default; internals pages override this
+
+nav:
+  - Home: index.md
+  - User Guide:
+    - Installation: user-guide/installation.md
+    - Reading and Writing: user-guide/reading-and-writing.md
+    - Computation: user-guide/compute.md
+    - Formats: user-guide/formats.md
+  - API Reference:
+    - Reader & Writer: api/reader-writer.md
+    - Domain Models: api/models.md
+    - Views: api/views.md
+    - Backends: api/backends.md
+    - Factories: api/factories.md
+  - Internals:
+    - I/O Adapters: internals/io-adapters.md
+    - Detection: internals/detection.md
+    - Registry: internals/registry.md
+    - Parsers: internals/parsers.md
