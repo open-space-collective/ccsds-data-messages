@@ -117,47 +117,56 @@ class KVNOMMReader:
     """
 
     def read(self, path: Path) -> OMM:
+        """Reads a KVN OMM file and returns a validated OMM domain model.
+
+        Args:
+            path: Path to the KVN OMM file.
+
+        Returns:
+            A fully validated OMM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         text = path.read_text()
         raw = parse_kvn(text)
         ordered = raw.get("header_ordered_items", [])
 
-        d = _dispatch_flat(ordered)
+        parsed = _dispatch_flat(ordered)
 
         header = OMM.Header(
-            **map_kvs(d["header_kvs"], d["header_comments"], OMM.Header)
+            **map_kvs(parsed["header_kvs"], parsed["header_comments"], OMM.Header)
         )
         metadata = OMM.Metadata(
-            **map_kvs(d["meta_kvs"], d["meta_comments"], OMM.Metadata)
+            **map_kvs(parsed["meta_kvs"], parsed["meta_comments"], OMM.Metadata)
         )
         mean_keplerian = OMM.Data.MeanKeplerianElements(
-            **map_kvs(d["me_kvs"], d["me_comments"], OMM.Data.MeanKeplerianElements)
+            **map_kvs(parsed["me_kvs"], parsed["me_comments"], OMM.Data.MeanKeplerianElements)
         )
         spacecraft = (
             OMM.Data.SpacecraftParameters(
-                **map_kvs(d["sp_kvs"], d["sp_comments"], OMM.Data.SpacecraftParameters)
+                **map_kvs(parsed["sp_kvs"], parsed["sp_comments"], OMM.Data.SpacecraftParameters)
             )
-            if d["sp_kvs"]
+            if parsed["sp_kvs"]
             else None
         )
         tle_params = (
             OMM.Data.TLERelatedParameters(
-                **map_kvs(d["tle_kvs"], d["tle_comments"], OMM.Data.TLERelatedParameters)
+                **map_kvs(parsed["tle_kvs"], parsed["tle_comments"], OMM.Data.TLERelatedParameters)
             )
-            if d["tle_kvs"]
+            if parsed["tle_kvs"]
             else None
         )
         cov = (
             OMM.Data.CovarianceMatrix(
-                **map_kvs(d["cov_kvs"], d["cov_comments"], OMM.Data.CovarianceMatrix)
+                **map_kvs(parsed["cov_kvs"], parsed["cov_comments"], OMM.Data.CovarianceMatrix)
             )
-            if d["cov_kvs"]
+            if parsed["cov_kvs"]
             else None
         )
         user = (
             OMM.Data.UserDefinedParameters(
-                **map_kvs(d["user_kvs"], [], OMM.Data.UserDefinedParameters)
+                **map_kvs(parsed["user_kvs"], [], OMM.Data.UserDefinedParameters)
             )
-            if d["user_kvs"]
+            if parsed["user_kvs"]
             else None
         )
 

@@ -1,3 +1,4 @@
+"""Domain models for the four CCSDS 502.0-B-3 Orbit Data Message types."""
 from .base import CCSDSDataMessage
 from .oem import OEM
 from .oem import OrbitEphemerisMessage

@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from orbit_data_messages.io.kvn._utils import build_keyword_map
+from orbit_data_messages.io._utils import build_keyword_map
 from orbit_data_messages.io.xml._utils import read_model
 from orbit_data_messages.io.xml.parser import find_all
 from orbit_data_messages.io.xml.parser import find_child
@@ -54,6 +54,15 @@ class XMLOPMReader:
     """
 
     def read(self, path: Path) -> OPM:
+        """Reads an XML OPM file and returns a validated OPM domain model.
+
+        Args:
+            path: Path to the XML OPM file.
+
+        Returns:
+            A fully validated OPM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         root = parse_xml_file(path)
 
         # §8.3.6 — version is the root 'version' attribute.

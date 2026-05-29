@@ -3,13 +3,13 @@ from datetime import datetime as _datetime
 from datetime import timedelta as _timedelta
 from typing import Annotated
 from typing import Any
+from typing import ClassVar
 
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic import field_validator
 from pydantic import model_validator
-from pydantic import PrivateAttr
- 
+
 from .base import CCSDSDataMessage
 from .metadata import Delineation
 from .metadata import FieldMetadata
@@ -50,13 +50,13 @@ def _epoch_sort_key(epoch: str) -> str:
 
     Both formats sort correctly by string comparison when used consistently.
     Mixed sequences would produce incorrect comparisons, so DOY epochs are
-    normalised to calendar format before comparison.
+    normalized to calendar format before comparison.
     """
     e = epoch.rstrip("Z")
     # DOY format detected by: year(4) dash doy(3) 'T' — position 8 is 'T'.
     if len(e) > 8 and e[4] == "-" and e[8] == "T" and e[5:8].isdigit():
         year = int(e[:4])
-        doy  = int(e[5:8])
+        doy = int(e[5:8])
         date = (_datetime(year, 1, 1) + _timedelta(days=doy - 1)).strftime("%Y-%m-%d")
         return date + "T" + e[9:]
     return e
@@ -89,8 +89,15 @@ class OEM(CCSDSDataMessage, BaseModel):
     """
 
     class Header(BaseModel):
+        """OEM header block (CCSDS 502.0-B-3 table 5-2).
+
+        Contains the message version, optional comments and classification,
+        creation date, originator, and optional message ID. The header appears
+        once at the top of the file, before the first segment.
+        """
+
         ccsds_oem_vers: Annotated[
-            str, 
+            str,
             Field(
                 description=(
                     "Format version in the form of 'x.y', where "
@@ -107,14 +114,14 @@ class OEM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "Comments (allowed in the OPM Header "
-                    "only immediately after the OPM version number). "
+                    "Comments (allowed in the OEM Header "
+                    "only immediately after the OEM version number). "
                     "See 7.8 for formatting rules."
                 ),
             ),
             FieldMetadata(keyword="COMMENT"),
         ] = None
-        
+
         classification: Annotated[
             str | None,
             Field(
@@ -178,7 +185,7 @@ class OEM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -196,13 +203,10 @@ class OEM(CCSDSDataMessage, BaseModel):
         class Metadata(BaseModel):
             """
             Per-segment metadata, delimited by META_START / META_STOP in KVN.
-            Modelled here as a plain dataclass; the delimiters are a serialisation
+            Modelled here as a plain dataclass; the delimiters are a serialization
             concern, not a domain concern.
             """
-            # Private attribute: Hidden from initialization, schemas, and optionality signals
-            _delineation: Delineation = PrivateAttr(
-                default_factory=lambda: Delineation("META_START", "META_STOP")
-            )
+            _delineation: ClassVar[Delineation] = Delineation("META_START", "META_STOP")
 
             # 7.8 Formatting rules
             comment: Annotated[
@@ -210,14 +214,14 @@ class OEM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
+                        "Comments (allowed in the OEM Metadata block "
+                        "immediately after META_START). "
                         "See 7.8 for formatting rules."
                     ),
                 ),
                 FieldMetadata(keyword="COMMENT"),
             ] = None
-            
+
             object_name: Annotated[
                 str,
                 Field(
@@ -367,22 +371,13 @@ class OEM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
             # The spec explicitly says "there is no CCSDS-based restriction on the value
-            # for this keyword" and calls the YYYY-NNNP{PP} format a recommendation
-            #
-            # @field_validator("object_id")
-            # @classmethod
-            # def validate_object_id(cls, v: str) -> str:
-            #     if v != "UNKNOWN" and not re.fullmatch(r"\d{4}-\d{3}[A-Z]+", v):
-            #         raise ValueError(
-            #             "object_id must be 'UNKNOWN' or match YYYY-NNNP{PP}, e.g. '2000-052A'"
-            #         )
-            #     return v
- 
+            # for this keyword" and calls the YYYY-NNNP{PP} format a recommendation.
+
             @field_validator("ref_frame_epoch", "start_time", "stop_time",
                              "useable_start_time", "useable_stop_time",
                              mode="before")
@@ -418,32 +413,29 @@ class OEM(CCSDSDataMessage, BaseModel):
                 """
                 Useable start/stop must lie within [start_time, stop_time].
                 §7.5.10 allows two epoch formats (calendar and DOY); _epoch_sort_key
-                normalises both to calendar format before comparison.
+                normalizes both to calendar format before comparison.
                 """
-                def _key(t: str) -> str:
-                    return _epoch_sort_key(t)
-
                 if self.useable_start_time is not None:
-                    if _key(self.useable_start_time) < _key(self.start_time):
+                    if _epoch_sort_key(self.useable_start_time) < _epoch_sort_key(self.start_time):
                         raise ValueError(
                             "useable_start_time must not be earlier than start_time."
                         )
-                    if _key(self.useable_start_time) > _key(self.stop_time):
+                    if _epoch_sort_key(self.useable_start_time) > _epoch_sort_key(self.stop_time):
                         raise ValueError(
                             "useable_start_time must not be later than stop_time."
                         )
                 if self.useable_stop_time is not None:
-                    if _key(self.useable_stop_time) > _key(self.stop_time):
+                    if _epoch_sort_key(self.useable_stop_time) > _epoch_sort_key(self.stop_time):
                         raise ValueError(
                             "useable_stop_time must not be later than stop_time."
                         )
-                    if _key(self.useable_stop_time) < _key(self.start_time):
+                    if _epoch_sort_key(self.useable_stop_time) < _epoch_sort_key(self.start_time):
                         raise ValueError(
                             "useable_stop_time must not be earlier than start_time."
                         )
                 if (self.useable_start_time is not None
                     and self.useable_stop_time is not None
-                    and _key(self.useable_start_time) > _key(self.useable_stop_time)):
+                    and _epoch_sort_key(self.useable_start_time) > _epoch_sort_key(self.useable_stop_time)):
                         raise ValueError(
                             "useable_start_time must not be later than useable_stop_time."
                         )
@@ -494,12 +486,9 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Position vector X-component. [km]"
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="X",
-                        units="km",
-                    ),
+                    FieldMetadata(keyword="X", units="km", format_spec=" .3f"),
                 ]
-    
+
                 y: Annotated[
                     float,
                     Field(
@@ -507,12 +496,9 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Position vector Y-component. [km]"
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="Y",
-                        units="km",
-                    ),
+                    FieldMetadata(keyword="Y", units="km", format_spec=" .3f"),
                 ]
-    
+
                 z: Annotated[
                     float,
                     Field(
@@ -520,24 +506,18 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Position vector Z-component. [km]"
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="Z",
-                        units="km",
-                    ),
+                    FieldMetadata(keyword="Z", units="km", format_spec=" .3f"),
                 ]
-    
+
                 x_dot: Annotated[
                     float,
                     Field(description=(
                         "Velocity vector X-component. [km/s]"
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="X_DOT",
-                        units="km/s",
-                    ),
+                    FieldMetadata(keyword="X_DOT", units="km/s", format_spec=" .5f"),
                 ]
-    
+
                 y_dot: Annotated[
                     float,
                     Field(
@@ -545,12 +525,9 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Velocity vector Y-component. [km/s]"
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="Y_DOT",
-                        units="km/s",
-                    ),
+                    FieldMetadata(keyword="Y_DOT", units="km/s", format_spec=" .5f"),
                 ]
-    
+
                 z_dot: Annotated[
                     float,
                     Field(
@@ -558,12 +535,9 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Velocity vector Z-component. [km/s]"
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="Z_DOT",
-                        units="km/s",
-                    ),
+                    FieldMetadata(keyword="Z_DOT", units="km/s", format_spec=" .5f"),
                 ]
-    
+
                 x_ddot: Annotated[
                     float | None,
                     Field(
@@ -573,12 +547,9 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Must be provided together with y_ddot and z_ddot, or not at all."
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="X_DDOT",
-                        units="km/s**2",
-                    ),
+                    FieldMetadata(keyword="X_DDOT", units="km/s**2", format_spec=" .1e"),
                 ] = None
-    
+
                 y_ddot: Annotated[
                     float | None,
                     Field(
@@ -588,12 +559,9 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Must be provided together with x_ddot and z_ddot, or not at all."
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="Y_DDOT",
-                        units="km/s**2",
-                    ),
+                    FieldMetadata(keyword="Y_DDOT", units="km/s**2", format_spec=" .1e"),
                 ] = None
-    
+
                 z_ddot: Annotated[
                     float | None,
                     Field(
@@ -603,10 +571,7 @@ class OEM(CCSDSDataMessage, BaseModel):
                             "Must be provided together with x_ddot and y_ddot, or not at all."
                         ),
                     ),
-                    FieldMetadata(
-                        keyword="Z_DDOT",
-                        units="km/s**2",
-                    ),
+                    FieldMetadata(keyword="Z_DDOT", units="km/s**2", format_spec=" .1e"),
                 ] = None
     
                 @field_validator("epoch")
@@ -631,8 +596,8 @@ class OEM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
+                        "Comments (allowed at the beginning of the OEM data section "
+                        "only; must not appear between data lines, per §7.8.9). "
                         "See 7.8 for formatting rules."
                     ),
                 ),
@@ -653,58 +618,84 @@ class OEM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
             @model_validator(mode="after")
             def check_epochs_ordered(self) -> "OEM.Segment.EphemerisData.EphemerisDataLine":
                 epochs = [sv.epoch for sv in self.ephemeris_data_lines]
-                for i in range(1, len(epochs)):
-                    if _epoch_sort_key(epochs[i]) <= _epoch_sort_key(epochs[i - 1]):
+                for i, (prev_epoch, curr_epoch) in enumerate(zip(epochs, epochs[1:]), start=1):
+                    if _epoch_sort_key(curr_epoch) <= _epoch_sort_key(prev_epoch):
                         raise ValueError(
                             f"Ephemeris data line epochs must be strictly increasing. "
-                            f"Found epoch[{i}]='{epochs[i]}' <= epoch[{i-1}]='{epochs[i-1]}'."
+                            f"Found epoch[{i}]='{curr_epoch}' <= epoch[{i-1}]='{prev_epoch}'."
                         )
                 return self
  
-            # @model_validator(mode="after")
-            # def check_acceleration_consistency(self) -> "OEM.Segment.EphemerisData.EphemerisDataLine":
-            #     """
-            #     While the spec allows mixing lines with and without accelerations
-            #     within a block (each line is independently valid), uniform presence
-            #     is strongly expected in practice. Warn via ValueError if mixed to
-            #     surface likely data errors early.
-            #     """
-            #     has_accel = [sv.x_ddot is not None for sv in self.ephemeris_data_lines]
-            #     if any(has_accel) and not all(has_accel):
-            #         raise ValueError(
-            #             "Acceleration components must be present on all state vector "
-            #             "lines or none within a single ephemeris block. Mixed blocks "
-            #             "are not permitted."
-            #         )
-            #     return self
-
             # ------------------------------------------------------------------
             # Computation shortcuts — one-line delegates, zero logic.
             # Removing these methods leaves EphemerisData fully functional.
             # ------------------------------------------------------------------
 
             def to_numpy(self) -> Any:
+                """Convert to a (N, 6) or (N, 9) numpy array via NumpyBackend.
+
+                Returns:
+                    float64 ndarray of shape (N, 6) without accelerations, (N, 9) with.
+
+                Raises:
+                    ImportError: If numpy is not installed. Install with
+                        ``pip install orbit-data-messages[numpy]``.
+                """
                 from orbit_data_messages.compute.backends.numpy_ import NumpyBackend
                 return NumpyBackend().to_array(self)
 
             def to_ostk(self) -> Any:
+                """Convert to an OSTk Trajectory object via OSTkBackend.
+
+                Returns:
+                    An OSTk Trajectory built from this ephemeris data.
+
+                Raises:
+                    ImportError: If OSTk is not installed. Install with
+                        ``pip install orbit-data-messages[ostk]``.
+                """
                 from orbit_data_messages.compute.backends.ostk_ import OSTkBackend
                 return OSTkBackend().trajectory_from_ephemeris(self)
 
             @classmethod
             def from_numpy(cls, arr: Any, epochs: list[str]) -> "OEM.Segment.EphemerisData":
+                """Construct a validated EphemerisData from a numpy array and epoch strings.
+
+                Args:
+                    arr: float64 ndarray of shape (N, 6) or (N, 9).
+                    epochs: N CCSDS §7.5.10 epoch strings.
+
+                Returns:
+                    A fully validated EphemerisData instance.
+
+                Raises:
+                    ImportError: If numpy is not installed. Install with
+                        ``pip install orbit-data-messages[numpy]``.
+                """
                 from orbit_data_messages.compute.backends.numpy_ import NumpyBackend
                 return NumpyBackend().ephemeris_data_from_array(arr, epochs)
 
             @classmethod
             def from_ostk(cls, trajectory: Any) -> "OEM.Segment.EphemerisData":
+                """Construct a validated EphemerisData from an OSTk Trajectory.
+
+                Args:
+                    trajectory: An OSTk Trajectory object.
+
+                Returns:
+                    A fully validated EphemerisData instance.
+
+                Raises:
+                    ImportError: If OSTk is not installed. Install with
+                        ``pip install orbit-data-messages[ostk]``.
+                """
                 from orbit_data_messages.compute.backends.ostk_ import OSTkBackend
                 return OSTkBackend().ephemeris_data_from_trajectory(trajectory)
 
@@ -751,279 +742,133 @@ class OEM(CCSDSDataMessage, BaseModel):
                 # Row 1
                 cx_x: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [1,1]. [km**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CX_X",
-                        units="km**2",
-                    ),
+                    Field(description="Covariance matrix [1,1]. [km**2]"),
+                    FieldMetadata(keyword="CX_X", units="km**2", format_spec=" .15e"),
                 ]
 
                 # Row 2
                 cy_x: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [2,1]. [km**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_X",
-                        units="km**2",
-                    ),
+                    Field(description="Covariance matrix [2,1]. [km**2]"),
+                    FieldMetadata(keyword="CY_X", units="km**2", format_spec=" .15e"),
                 ]
 
                 cy_y: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [2,2]. [km**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_Y",
-                        units="km**2",
-                    ),
+                    Field(description="Covariance matrix [2,2]. [km**2]"),
+                    FieldMetadata(keyword="CY_Y", units="km**2", format_spec=" .15e"),
                 ]
 
                 # Row 3
                 cz_x: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [3,1]. [km**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_X",
-                        units="km**2",
-                    ),
+                    Field(description="Covariance matrix [3,1]. [km**2]"),
+                    FieldMetadata(keyword="CZ_X", units="km**2", format_spec=" .15e"),
                 ]
 
                 cz_y: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [3,2]. [km**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_Y", 
-                        units="km**2"
-                    ),
+                    Field(description="Covariance matrix [3,2]. [km**2]"),
+                    FieldMetadata(keyword="CZ_Y", units="km**2", format_spec=" .15e"),
                 ]
 
                 cz_z: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [3,3]. [km**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_Z",
-                        units="km**2",
-                    ),
+                    Field(description="Covariance matrix [3,3]. [km**2]"),
+                    FieldMetadata(keyword="CZ_Z", units="km**2", format_spec=" .15e"),
                 ]
 
                 # Row 4
                 cx_dot_x: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [4,1]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CX_DOT_X",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [4,1]. [km**2/s]"),
+                    FieldMetadata(keyword="CX_DOT_X", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cx_dot_y: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [4,2]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CX_DOT_Y",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [4,2]. [km**2/s]"),
+                    FieldMetadata(keyword="CX_DOT_Y", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cx_dot_z: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [4,3]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CX_DOT_Z",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [4,3]. [km**2/s]"),
+                    FieldMetadata(keyword="CX_DOT_Z", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cx_dot_x_dot: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [4,4]. [km**2/s**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CX_DOT_X_DOT",
-                        units="km**2/s**2",
-                    ),
+                    Field(description="Covariance matrix [4,4]. [km**2/s**2]"),
+                    FieldMetadata(keyword="CX_DOT_X_DOT", units="km**2/s**2", format_spec=" .15e"),
                 ]
 
                 # Row 5
                 cy_dot_x: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [5,1]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_DOT_X",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [5,1]. [km**2/s]"),
+                    FieldMetadata(keyword="CY_DOT_X", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cy_dot_y: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [5,2]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_DOT_Y",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [5,2]. [km**2/s]"),
+                    FieldMetadata(keyword="CY_DOT_Y", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cy_dot_z: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [5,3]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_DOT_Z",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [5,3]. [km**2/s]"),
+                    FieldMetadata(keyword="CY_DOT_Z", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cy_dot_x_dot: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [5,4]. [km**2/s**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_DOT_X_DOT",
-                        units="km**2/s**2",
-                    ),
+                    Field(description="Covariance matrix [5,4]. [km**2/s**2]"),
+                    FieldMetadata(keyword="CY_DOT_X_DOT", units="km**2/s**2", format_spec=" .15e"),
                 ]
 
                 cy_dot_y_dot: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [5,5]. [km**2/s**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CY_DOT_Y_DOT",
-                        units="km**2/s**2",
-                    ),
+                    Field(description="Covariance matrix [5,5]. [km**2/s**2]"),
+                    FieldMetadata(keyword="CY_DOT_Y_DOT", units="km**2/s**2", format_spec=" .15e"),
                 ]
 
                 # Row 6
                 cz_dot_x: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [6,1]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_DOT_X",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [6,1]. [km**2/s]"),
+                    FieldMetadata(keyword="CZ_DOT_X", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cz_dot_y: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [6,2]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_DOT_Y",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [6,2]. [km**2/s]"),
+                    FieldMetadata(keyword="CZ_DOT_Y", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cz_dot_z: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [6,3]. [km**2/s]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_DOT_Z",
-                        units="km**2/s",
-                    ),
+                    Field(description="Covariance matrix [6,3]. [km**2/s]"),
+                    FieldMetadata(keyword="CZ_DOT_Z", units="km**2/s", format_spec=" .15e"),
                 ]
 
                 cz_dot_x_dot: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [6,4]. [km**2/s**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_DOT_X_DOT",
-                        units="km**2/s**2",
-                    ),
+                    Field(description="Covariance matrix [6,4]. [km**2/s**2]"),
+                    FieldMetadata(keyword="CZ_DOT_X_DOT", units="km**2/s**2", format_spec=" .15e"),
                 ]
+
                 cz_dot_y_dot: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [6,5]. [km**2/s**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_DOT_Y_DOT",
-                        units="km**2/s**2",
-                    ),
+                    Field(description="Covariance matrix [6,5]. [km**2/s**2]"),
+                    FieldMetadata(keyword="CZ_DOT_Y_DOT", units="km**2/s**2", format_spec=" .15e"),
                 ]
 
                 cz_dot_z_dot: Annotated[
                     float,
-                    Field(
-                        description=(
-                            "Covariance matrix [6,6]. [km**2/s**2]"
-                        ),
-                    ),
-                    FieldMetadata(
-                        keyword="CZ_DOT_Z_DOT",
-                        units="km**2/s**2",
-                    ),
+                    Field(description="Covariance matrix [6,6]. [km**2/s**2]"),
+                    FieldMetadata(keyword="CZ_DOT_Z_DOT", units="km**2/s**2", format_spec=" .15e"),
                 ]
 
                 @field_validator("epoch")
@@ -1031,39 +876,7 @@ class OEM(CCSDSDataMessage, BaseModel):
                 def validate_epoch(cls, v: str) -> str:
                     return _validate_ccsds_date(v, "epoch")
 
-                # The spec imposes no validity constraint beyond numeric format.
-                # A zero variance (e.g., cx_x = 0.0) is expressible in double precision
-                # and passes all stated spec requirements, yet this check rejects it.
-                # The check adds a mathematical constraint that the spec does not mandate.
-                #
-                # @model_validator(mode="after")
-                # def check_covariance_positive_definite_proxy(self) -> "OEM.Data.CovarianceMatrixLines":
-                #     """
-                #     Proxy check for positive-definiteness: verifies all diagonal (variance)
-                #     elements are strictly positive. Necessary but not sufficient for a valid
-                #     covariance matrix. A full Cholesky-based check would be sufficient but
-                #     requires numpy or similar to be computationally efficient.
-                #     """
-                #     diagonal = [
-                #         ("CX_X", self.cx_x),
-                #         ("CY_Y", self.cy_y),
-                #         ("CZ_Z", self.cz_z),
-                #         ("CX_DOT_X_DOT", self.cx_dot_x_dot),
-                #         ("CY_DOT_Y_DOT", self.cy_dot_y_dot),
-                #         ("CZ_DOT_Z_DOT", self.cz_dot_z_dot),
-                #     ]
-                #     non_positive = [kw for kw, v in diagonal if v <= 0]
-                #     if non_positive:
-                #         raise ValueError(
-                #             f"Covariance diagonal elements must be strictly positive "
-                #             f"(variance cannot be zero or negative). "
-                #             f"Failing elements: {', '.join(non_positive)}"
-                #         )
-                #     return self
-
-            _delineation: Delineation = PrivateAttr(
-                default_factory=lambda: Delineation("COVARIANCE_START", "COVARIANCE_STOP")
-            )
+            _delineation: ClassVar[Delineation] = Delineation("COVARIANCE_START", "COVARIANCE_STOP")
             
             # 7.8 Formatting rules
             comment: Annotated[
@@ -1071,14 +884,14 @@ class OEM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
+                        "Comments (allowed at the beginning of the OEM covariance block "
+                        "only; must not appear between matrix lines, per §7.8.9). "
                         "See 7.8 for formatting rules."
                     ),
                 ),
                 FieldMetadata(keyword="COMMENT"),
             ] = None
- 
+
             covariance_matrix_lines: Annotated[
                 list["OEM.Segment.CovarianceMatrix.CovarianceMatrixLines"],
                 Field(
@@ -1093,19 +906,19 @@ class OEM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
- 
+
             @model_validator(mode="after")
             def check_epochs_ordered(self) -> "OEM.Segment.CovarianceMatrix.CovarianceMatrixLines":
                 epochs = [m.epoch for m in self.covariance_matrix_lines]
-                for i in range(1, len(epochs)):
-                    if _epoch_sort_key(epochs[i]) <= _epoch_sort_key(epochs[i - 1]):
+                for i, (prev_epoch, curr_epoch) in enumerate(zip(epochs, epochs[1:]), start=1):
+                    if _epoch_sort_key(curr_epoch) <= _epoch_sort_key(prev_epoch):
                         raise ValueError(
                             f"Covariance matrix epochs must be strictly increasing "
-                            f"(5.2.5.7). Found epoch[{i}]='{epochs[i]}' <= "
-                            f"epoch[{i-1}]='{epochs[i-1]}'."
+                            f"(5.2.5.7). Found epoch[{i}]='{curr_epoch}' <= "
+                            f"epoch[{i-1}]='{prev_epoch}'."
                         )
                 return self
 
@@ -1115,6 +928,15 @@ class OEM(CCSDSDataMessage, BaseModel):
             # ------------------------------------------------------------------
 
             def to_numpy(self) -> Any:
+                """Convert to an (N, 6, 6) numpy array of covariance matrices via NumpyBackend.
+
+                Returns:
+                    float64 ndarray of shape (N, 6, 6).
+
+                Raises:
+                    ImportError: If numpy is not installed. Install with
+                        ``pip install orbit-data-messages[numpy]``.
+                """
                 from orbit_data_messages.compute.backends.numpy_ import NumpyBackend
                 return NumpyBackend().covariance_to_array(self)
 
@@ -1125,6 +947,21 @@ class OEM(CCSDSDataMessage, BaseModel):
                 epochs: list[str],
                 cov_ref_frame: str | None = None,
             ) -> "OEM.Segment.CovarianceMatrix":
+                """Construct a validated CovarianceMatrix from a numpy array and epoch strings.
+
+                Args:
+                    arr: float64 ndarray of shape (N, 6, 6).
+                    epochs: N CCSDS §7.5.10 epoch strings.
+                    cov_ref_frame: Optional reference frame string. When ``None``,
+                        no COV_REF_FRAME is set on the resulting lines.
+
+                Returns:
+                    A fully validated CovarianceMatrix instance.
+
+                Raises:
+                    ImportError: If numpy is not installed. Install with
+                        ``pip install orbit-data-messages[numpy]``.
+                """
                 from orbit_data_messages.compute.backends.numpy_ import NumpyBackend
                 return NumpyBackend().covariance_from_array(arr, epochs, cov_ref_frame)
 
@@ -1143,10 +980,10 @@ class OEM(CCSDSDataMessage, BaseModel):
         def check_ephemeris_within_time_span(self) -> "OEM.Segment":
             """
             All ephemeris data line epochs must lie within [start_time, stop_time].
-            §7.5.10 allows calendar and DOY formats; _epoch_sort_key normalises both.
+            §7.5.10 allows calendar and DOY formats; _epoch_sort_key normalizes both.
             """
             start = _epoch_sort_key(self.metadata.start_time)
-            stop  = _epoch_sort_key(self.metadata.stop_time)
+            stop = _epoch_sort_key(self.metadata.stop_time)
             for i, sv in enumerate(self.ephemeris_data.ephemeris_data_lines):
                 key = _epoch_sort_key(sv.epoch)
                 if key < start or key > stop:
@@ -1161,7 +998,7 @@ class OEM(CCSDSDataMessage, BaseModel):
             if self.covariance_matrix is None:
                 return self
             start = _epoch_sort_key(self.metadata.start_time)
-            stop  = _epoch_sort_key(self.metadata.stop_time)
+            stop = _epoch_sort_key(self.metadata.stop_time)
             for i, cm in enumerate(self.covariance_matrix.covariance_matrix_lines):
                 key = _epoch_sort_key(cm.epoch)
                 if key < start or key > stop:
@@ -1205,9 +1042,9 @@ class OEM(CCSDSDataMessage, BaseModel):
         except for a possibly shared endpoint (5.2.4.4).
         Only checked when both consecutive segments define useable bounds.
         """
-        for i in range(1, len(self.segments)):
-            prev = self.segments[i - 1].metadata
-            curr = self.segments[i].metadata
+        for i, (prev_seg, curr_seg) in enumerate(zip(self.segments, self.segments[1:]), start=1):
+            prev = prev_seg.metadata
+            curr = curr_seg.metadata
             if prev.useable_stop_time is not None and curr.useable_start_time is not None:
                 if _epoch_sort_key(curr.useable_start_time) < _epoch_sort_key(prev.useable_stop_time):
                     raise ValueError(

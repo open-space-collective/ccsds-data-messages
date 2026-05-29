@@ -39,10 +39,10 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 class StateView:
-    """
-    A single ephemeris state line bound to a backend.
+    """A single ephemeris state line bound to a backend.
 
     All properties delegate to the backend — the view contains no computation.
+    This view holds a reference to the domain model — it does not copy data.
     """
 
     __slots__ = ("_line", "_backend")
@@ -57,27 +57,27 @@ class StateView:
 
     @property
     def epoch(self) -> str:
-        """CCSDS §7.5.10 epoch string from the domain model (no backend needed)."""
+        """CCSDS §7.5.10 epoch string read directly from the domain model."""
         return self._line.epoch
 
     @property
     def position(self) -> Any:
-        """Position vector in the backend's native type."""
+        """Position vector delegated to the backend's native type."""
         return self._backend.position(self._line)
 
     @property
     def velocity(self) -> Any:
-        """Velocity vector in the backend's native type."""
+        """Velocity vector delegated to the backend's native type."""
         return self._backend.velocity(self._line)
 
     @property
     def acceleration(self) -> Any:
-        """Acceleration vector in the backend's native type, or None if absent."""
+        """Acceleration vector delegated to the backend, or None if absent."""
         return self._backend.acceleration(self._line)
 
     @property
     def line(self) -> OEM.Segment.EphemerisData.EphemerisDataLine:
-        """The underlying domain model EphemerisDataLine (read-only reference)."""
+        """Read-only reference to the underlying domain model EphemerisDataLine."""
         return self._line
 
     def __repr__(self) -> str:
@@ -89,12 +89,12 @@ class StateView:
 # ---------------------------------------------------------------------------
 
 class EphemerisView:
-    """
-    An EphemerisData block bound to a backend.
+    """An EphemerisData block bound to a backend.
 
     Iterable — yields one StateView per data line.
-    Callable  — delegates to backend.interpolate(data, epoch).
-    Shortcuts — to_numpy() and to_ostk() use deferred backend imports.
+    Callable  — delegates interpolation to ``backend.interpolate(data, epoch)``.
+    Shortcuts — ``to_numpy()`` and ``to_ostk()`` use deferred backend imports.
+    This view holds a reference to the domain model — it does not copy data.
     """
 
     __slots__ = ("_data", "_backend")
@@ -120,22 +120,28 @@ class EphemerisView:
         return len(self._data.ephemeris_data_lines)
 
     def __call__(self, epoch: Any) -> OEM.Segment.EphemerisData.EphemerisDataLine:
-        """
-        Interpolate at the given backend epoch.
+        """Interpolate the ephemeris at the given epoch by delegating to the backend.
 
-        epoch must be in the backend's native epoch type (e.g. the output of
-        backend.parse_epoch()).  Returns a validated EphemerisDataLine.
+        Delegates to ``backend.interpolate(data, epoch)``. All interpolation
+        logic lives in the backend — the view contains none.
+
+        Args:
+            epoch: The target epoch in the backend's native type (e.g. the
+                output of ``backend.parse_epoch()``).
+
+        Returns:
+            A validated EphemerisDataLine at the requested epoch.
         """
         return self._backend.interpolate(self._data, epoch)
 
     @property
     def data(self) -> OEM.Segment.EphemerisData:
-        """The underlying domain model EphemerisData (read-only reference)."""
+        """Read-only reference to the underlying domain model EphemerisData."""
         return self._data
 
     @property
     def backend(self) -> EphemerisBackend:
-        """The bound backend."""
+        """The backend bound to this view."""
         return self._backend
 
     # ------------------------------------------------------------------
@@ -143,19 +149,37 @@ class EphemerisView:
     # ------------------------------------------------------------------
 
     def to_numpy(self) -> Any:
-        """
-        Return a (N, 6) or (N, 9) numpy array.
+        """Return a (N, 6) or (N, 9) numpy array.
 
-        Requires the 'numpy' extra: pip install orbit-data-messages[numpy]
+        Convenience wrapper that delegates to ``NumpyBackend().to_array()``.
+        The import of ``NumpyBackend`` is deferred to this method body so that
+        the view module never loads numpy at import time.
+
+        Returns:
+            An ``ndarray`` of shape ``(N, 6)`` when no accelerations are
+            present, or ``(N, 9)`` when accelerations are present.
+
+        Raises:
+            ImportError: If numpy is not installed. Install with
+                ``pip install orbit-data-messages[numpy]``.
         """
         from orbit_data_messages.compute.backends.numpy_ import NumpyBackend  # deferred
         return NumpyBackend().to_array(self._data)
 
     def to_ostk(self) -> Any:
-        """
-        Return an OSTk Trajectory object.
+        """Return an OSTk Trajectory object.
 
-        Requires the 'ostk' extra: pip install orbit-data-messages[ostk]
+        Convenience wrapper that delegates to
+        ``OSTkBackend().trajectory_from_ephemeris()``. The import of
+        ``OSTkBackend`` is deferred to this method body so that the view
+        module never loads OSTk at import time.
+
+        Returns:
+            An OSTk ``Trajectory`` built from this ephemeris data.
+
+        Raises:
+            ImportError: If OSTk is not installed. Install with
+                ``pip install orbit-data-messages[ostk]``.
         """
         from orbit_data_messages.compute.backends.ostk_ import OSTkBackend   # deferred
         return OSTkBackend().trajectory_from_ephemeris(self._data)
@@ -173,11 +197,11 @@ class EphemerisView:
 # ---------------------------------------------------------------------------
 
 class CovarianceView:
-    """
-    A CovarianceMatrix block bound to a backend.
+    """A CovarianceMatrix block bound to a backend.
 
     Iterable — yields one backend-native 6×6 matrix per epoch.
-    Shortcut  — to_numpy() uses a deferred NumpyBackend import.
+    Shortcut  — ``to_numpy()`` uses a deferred ``NumpyBackend`` import.
+    This view holds a reference to the domain model — it does not copy data.
     """
 
     __slots__ = ("_cov", "_backend")
@@ -195,9 +219,7 @@ class CovarianceView:
     # ------------------------------------------------------------------
 
     def __iter__(self) -> Iterator[Any]:
-        """
-        Yield one backend-native 6×6 matrix per covariance epoch, in order.
-        """
+        """Yield one backend-native 6×6 matrix per covariance epoch, in order."""
         for matrix in self._backend.covariance_to_array(self._cov):
             yield matrix
 
@@ -206,12 +228,12 @@ class CovarianceView:
 
     @property
     def cov(self) -> OEM.Segment.CovarianceMatrix:
-        """The underlying domain model CovarianceMatrix (read-only reference)."""
+        """Read-only reference to the underlying domain model CovarianceMatrix."""
         return self._cov
 
     @property
     def backend(self) -> CovarianceBackend:
-        """The bound backend."""
+        """The backend bound to this view."""
         return self._backend
 
     # ------------------------------------------------------------------
@@ -219,10 +241,19 @@ class CovarianceView:
     # ------------------------------------------------------------------
 
     def to_numpy(self) -> Any:
-        """
-        Return a (N, 6, 6) numpy array.
+        """Return a (N, 6, 6) numpy array.
 
-        Requires the 'numpy' extra: pip install orbit-data-messages[numpy]
+        Convenience wrapper that delegates to
+        ``NumpyBackend().covariance_to_array()``. The import of
+        ``NumpyBackend`` is deferred to this method body so that the view
+        module never loads numpy at import time.
+
+        Returns:
+            An ``ndarray`` of shape ``(N, 6, 6)``.
+
+        Raises:
+            ImportError: If numpy is not installed. Install with
+                ``pip install orbit-data-messages[numpy]``.
         """
         from orbit_data_messages.compute.backends.numpy_ import NumpyBackend  # deferred
         return NumpyBackend().covariance_to_array(self._cov)

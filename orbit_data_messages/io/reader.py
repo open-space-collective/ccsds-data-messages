@@ -1,10 +1,10 @@
-"""
-Reader facade for CCSDS Orbit Data Messages.
+"""Reader facade for CCSDS Orbit Data Messages.
 
-Users interact only with this class.  All format detection, adapter selection,
+Users interact only with this class. All format detection, adapter selection,
 and parsing are invisible.
 
-    msg = Reader.read("file.oem")                          # auto-detect
+Example:
+    msg = Reader.read("file.oem")                               # auto-detect
     msg = Reader.read("data.txt", fmt="kvn", message_type="oem")  # explicit
 """
 from __future__ import annotations
@@ -18,12 +18,13 @@ from orbit_data_messages.models.base import CCSDSDataMessage
 
 
 class Reader:
-    """
-    Static-method facade for reading CCSDS Orbit Data Messages.
+    """Static-method facade for reading CCSDS Orbit Data Messages.
 
-    Accepts str or Path for the path argument.  When fmt and message_type are
-    both omitted, both are auto-detected (extension → stem keyword → content
-    sniff).  Providing both bypasses detection entirely.
+    Accepts str or Path for the path argument. When fmt and message_type are
+    both omitted, both are auto-detected (extension -> stem keyword -> content
+    sniff). Providing both bypasses detection entirely.
+
+    No instance state.
     """
 
     @staticmethod
@@ -33,28 +34,35 @@ class Reader:
         fmt: str | None = None,
         message_type: str | None = None,
     ) -> CCSDSDataMessage:
-        """
-        Read a CCSDS Orbit Data Message from path and return a validated
-        domain model.
+        """Read a CCSDS Orbit Data Message from path and return a validated domain model.
 
-        Parameters
-        ----------
-        path         : file to read (str or Path)
-        fmt          : 'kvn' | 'xml' — overrides format detection when provided
-        message_type : 'oem' | 'omm' | 'opm' | 'ocm' — overrides type
-                       detection when provided
+        When fmt and message_type are both omitted, detection proceeds in priority
+        order: file extension, filename stem keyword heuristic, then content sniff.
+        Providing both arguments bypasses detection entirely and no file I/O is
+        performed for detection purposes. Pydantic ValidationError is never
+        swallowed — it propagates to the caller unchanged.
 
-        Returns
-        -------
-        CCSDSDataMessage
-            The concrete message type (OEM, OMM, OPM, or OCM) as validated by
-            Pydantic.  Pydantic ValidationError is never swallowed.
+        Args:
+            path: File to read. Accepts str or Path.
+            fmt: Format override. One of ``'kvn'`` or ``'xml'``. When omitted,
+                the format is auto-detected from the file extension or content.
+            message_type: Message type override. One of ``'oem'``, ``'omm'``,
+                ``'opm'``, or ``'ocm'``. When omitted, the type is auto-detected
+                from the file extension, filename stem, or content.
 
-        Raises
-        ------
-        ValueError
-            If format or message type cannot be determined from the file and
-            no explicit override was supplied.
+        Returns:
+            The concrete message type (OEM, OMM, OPM, or OCM) as a fully
+            validated Pydantic domain model instance.
+
+        Raises:
+            ValueError: If format or message type cannot be determined from
+                the file and no explicit override was supplied.
+
+        Example:
+            >>> msg = Reader.read("file.oem")
+            >>> msg = Reader.read("data.txt", fmt="kvn", message_type="oem")
+            >>> isinstance(msg, CCSDSDataMessage)
+            True
         """
         path = Path(path)
 

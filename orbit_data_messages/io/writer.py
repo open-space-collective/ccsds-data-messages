@@ -1,18 +1,18 @@
-"""
-Writer facade for CCSDS Orbit Data Messages.
+"""Writer facade for CCSDS Orbit Data Messages.
 
-Users interact only with this class.  Format inference, adapter selection,
-and serialisation are invisible.
+Users interact only with this class. Format inference, adapter selection,
+and serialization are invisible.
 
-    Writer.write(msg, "output.oem")          # KVN inferred from extension
-    Writer.write(msg, "output.xml")          # XML inferred from extension
-    Writer.write(msg, "output.txt", fmt="kvn")  # explicit format
+Example:
+    Writer.write(msg, "output.oem")               # KVN inferred from extension
+    Writer.write(msg, "output.xml")               # XML inferred from extension
+    Writer.write(msg, "output.txt", fmt="kvn")    # explicit format
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-from orbit_data_messages.io.detection import detect_format
+from orbit_data_messages.io.options import WriterOptions
 from orbit_data_messages.io.registry import get_writer
 from orbit_data_messages.models.base import CCSDSDataMessage
 
@@ -40,12 +40,13 @@ def _message_type(message: CCSDSDataMessage) -> str:
 
 
 class Writer:
-    """
-    Static-method facade for writing CCSDS Orbit Data Messages.
+    """Static-method facade for writing CCSDS Orbit Data Messages.
 
-    Accepts str or Path for the path argument.  When fmt is omitted, the
-    output format is inferred from the file extension (.xml → xml; everything
-    else → kvn).
+    Accepts str or Path for the path argument. When fmt is omitted, the
+    output format is inferred from the file extension (.xml -> xml; everything
+    else -> kvn).
+
+    No instance state.
     """
 
     @staticmethod
@@ -54,23 +55,41 @@ class Writer:
         path: str | Path,
         *,
         fmt: str | None = None,
+        options: WriterOptions | None = None,
     ) -> None:
-        """
-        Serialise a CCSDS Orbit Data Message to path.
+        """Serialize a CCSDS Orbit Data Message to path.
 
-        Parameters
-        ----------
-        message : validated domain model (OEM, OMM, OPM, or OCM instance)
-        path    : output file (str or Path)
-        fmt     : 'kvn' | 'xml' — overrides format inference when provided.
-                  When omitted, the format is inferred from the file extension
-                  (.xml → xml; .oem/.omm/.opm/.ocm/.txt/… → kvn).
+        When fmt is omitted, the output format is inferred from the file
+        extension: ``.xml`` produces XML; all other extensions (including
+        ``.oem``, ``.omm``, ``.opm``, ``.ocm``, and ``.txt``) produce KVN.
+        Providing fmt bypasses extension inference entirely.
+
+        Args:
+            message: Validated domain model instance to serialize. Must be
+                one of OEM, OMM, OPM, or OCM.
+            path: Destination file. Accepts str or Path. The file is
+                created or overwritten.
+            fmt: Format override. One of ``'kvn'`` or ``'xml'``. When omitted,
+                the format is inferred from the file extension.
+            options: Formatting options.  When omitted, ``WriterOptions()``
+                defaults apply (aligned keywords, units in XML).
+
+        Raises:
+            TypeError: If the concrete type of message is not a recognized
+                CCSDS message class (OEM, OMM, OPM, OCM).
+            ValueError: If fmt (or the inferred format) is not registered for
+                the given message type.
+
+        Example:
+            >>> Writer.write(msg, "output.oem")
+            >>> Writer.write(msg, "output.xml")
+            >>> Writer.write(msg, "output.txt", fmt="kvn")
         """
         path = Path(path)
 
         if fmt is None:
-            fmt = detect_format(path)
+            fmt = "xml" if path.suffix.lower() == ".xml" else "kvn"
 
         msg_type = _message_type(message)
         adapter = get_writer(fmt, msg_type)
-        adapter.write(message, path)
+        adapter.write(message, path, options=options or WriterOptions())

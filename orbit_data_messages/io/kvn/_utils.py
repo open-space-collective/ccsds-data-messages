@@ -1,57 +1,55 @@
 """
-Shared introspection helpers for KVN adapters (readers and writers).
+KVN-specific introspection and serialization helpers.
 
-Adapters use these to map between KVN keyword strings and Pydantic field names
-without hardcoding keyword strings.  The keyword strings live on the domain
-model as FieldMetadata(keyword=...) annotations; these helpers read them at
-runtime.
+Generic model-introspection utilities (build_keyword_map, map_kvs,
+format_value) live in io._utils and are re-exported here for convenience.
 
-Writer utilities
+KVN-only helpers
 ----------------
-format_value  — convert a Python field value to its KVN string
-emit_kvs      — write all non-None KV pairs for a model in field order
-emit_block    — write a model block, optionally wrapped in *_START/*_STOP
+get_delineation    — read the Delineation ClassVar from a model class
+block_delimiter_name — derive the block type string from a Delineation
+field_keyword      — look up the keyword string for a named field
+emit_kvs           — write all non-None KV pairs for a model in field order
+emit_block         — write a model block, optionally wrapped in *_START/*_STOP
 """
 from __future__ import annotations
 
-from enum import Enum
 from typing import TYPE_CHECKING
 from typing import TextIO
 
+from orbit_data_messages.io._utils import build_keyword_map
+from orbit_data_messages.io._utils import format_value
+from orbit_data_messages.io._utils import map_kvs
 from orbit_data_messages.models.metadata import Delineation
 from orbit_data_messages.models.metadata import FieldMetadata
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
+    from orbit_data_messages.io.options import WriterOptions
 
-
-def build_keyword_map(model_class: type[BaseModel]) -> dict[str, str]:
-    """
-    Return {KVN_keyword: pydantic_field_name} by reading FieldMetadata
-    annotations on every field of model_class.
-
-    Only direct fields of model_class are considered; nested classes are
-    not traversed — callers pass the specific class they need.
-    """
-    result: dict[str, str] = {}
-    for field_name, field_info in model_class.model_fields.items():
-        for item in field_info.metadata:
-            if isinstance(item, FieldMetadata):
-                result[item.keyword] = field_name
-    return result
+# Re-export so existing callers that import from this module continue to work.
+__all__ = [
+    "build_keyword_map",
+    "format_value",
+    "map_kvs",
+    "get_delineation",
+    "block_delimiter_name",
+    "field_keyword",
+    "emit_kvs",
+    "emit_block",
+]
 
 
 def get_delineation(model_class: type[BaseModel]) -> Delineation | None:
     """
-    Read the Delineation private attribute from model_class, if present.
+    Return the Delineation ClassVar from model_class, if present.
 
-    Returns the Delineation instance (with .start and .stop), or None when
-    the class does not carry block-delimiter metadata.
+    Nested block model classes (e.g. OEM.Segment.Metadata) carry a
+    `_delineation: ClassVar[Delineation]` that names the START/STOP keywords
+    for that block.  Returns None when the class carries no such annotation.
     """
-    priv = model_class.__private_attributes__.get('_delineation')
-    if priv is not None and priv.default_factory is not None:
-        return priv.default_factory()
-    return None
+    attr = getattr(model_class, '_delineation', None)
+    return attr if isinstance(attr, Delineation) else None
 
 
 def block_delimiter_name(model_class: type[BaseModel]) -> str | None:
@@ -62,10 +60,10 @@ def block_delimiter_name(model_class: type[BaseModel]) -> str | None:
 
     Returns None when the class has no Delineation.
     """
-    d = get_delineation(model_class)
-    if d is None:
+    delineation = get_delineation(model_class)
+    if delineation is None:
         return None
-    return d.start.removesuffix('_START')
+    return delineation.start.removesuffix('_START')
 
 
 def field_keyword(model_class: type[BaseModel], field_name: str) -> str:
@@ -92,74 +90,7 @@ def field_keyword(model_class: type[BaseModel], field_name: str) -> str:
     )
 
 
-def map_kvs(
-    kvs: dict[str, str],
-    comments: list[str],
-    model_class: type[BaseModel],
-) -> dict:
-    """
-    Build Pydantic constructor kwargs for model_class from KVN key-value
-    pairs and accumulated comment texts.
-
-    Rules
-    -----
-    - Keyword → field name mapping is read from FieldMetadata annotations;
-      no keyword string is hardcoded here.
-    - Pydantic v2 lax-mode coercion handles str→float/int/enum conversion.
-    - COMMENT lines are injected as list[str] via the 'comment' field when
-      the model carries one.
-    - USER_DEFINED_x keywords are gathered into a 'user_defined' dict using
-      the suffix x as the key.
-    - Unknown keywords (not in any FieldMetadata) are silently ignored so
-      that forward-compatible messages do not raise.
-    """
-    keyword_map = build_keyword_map(model_class)
-    kwargs: dict = {}
-
-    for keyword, value in kvs.items():
-        # USER_DEFINED_x — aggregate into a dict.
-        if keyword.startswith('USER_DEFINED_'):
-            suffix = keyword[len('USER_DEFINED_'):]
-            kwargs.setdefault('user_defined', {})[suffix] = value
-            continue
-
-        field_name = keyword_map.get(keyword)
-        if field_name is None:
-            continue  # unknown keyword — forward-compatible skip
-
-        kwargs[field_name] = value
-
-    # Inject comments when the model has a 'comment' field.
-    comment_field = keyword_map.get('COMMENT')
-    if comment_field and comments:
-        kwargs[comment_field] = comments
-
-    return kwargs
-
-
-# ---------------------------------------------------------------------------
-# Writer utilities
-# ---------------------------------------------------------------------------
-
-def format_value(value: object) -> str:
-    """
-    Format a Python field value as a KVN-compliant string.
-
-    Rules (§7.5)
-    ------------
-    §7.5.4  Integers: decimal digits with optional leading sign.
-    §7.5.5  Non-integer numerics: fixed-point or floating-point.
-    §7.5.2  Free-text and comment values: any case.
-    Enum values (StrEnum): use .value — the string the spec defines.
-    """
-    if isinstance(value, Enum):
-        return value.value  # StrEnum.value is the spec-defined string
-    if isinstance(value, float):
-        return repr(value)  # shortest round-trip representation (§7.5.5–7.5.7)
-    return str(value)
-
-
-def emit_kvs(model: BaseModel, out: TextIO) -> None:
+def emit_kvs(model: BaseModel, out: TextIO, *, options: "WriterOptions | None" = None) -> None:
     """
     Write KV pairs for all non-None fields of model in declaration order.
 
@@ -174,11 +105,23 @@ def emit_kvs(model: BaseModel, out: TextIO) -> None:
       pairs (§3.2.4.12, §4.2.4.10, §6.2.11.1).
     - Fields with no FieldMetadata and not a dict (e.g., data_lines in OCM
       blocks): silently skipped — caller handles them separately.
+
+    When options.align_keywords is True (default), keywords within the block
+    are right-padded so the '=' signs align in a column (§7.4.5 — whitespace
+    around keywords is insignificant).
     """
     kw_map = build_keyword_map(type(model))
     field_to_kw = {fn: kw for kw, fn in kw_map.items()}
+    align = options is not None and options.align_keywords
 
-    for field_name in type(model).model_fields:
+    # Phase 1 — collect entries.
+    # Each entry is one of:
+    #   ("_comment", text, None)          — COMMENT line
+    #   ("_user", "USER_DEFINED_k", value) — USER_DEFINED pair
+    #   (keyword, value, spec)             — normal KV pair
+    entries: list[tuple[str, object, object]] = []
+
+    for field_name, field_info in type(model).model_fields.items():
         value = getattr(model, field_name)
         if value is None:
             continue
@@ -186,16 +129,44 @@ def emit_kvs(model: BaseModel, out: TextIO) -> None:
         kw = field_to_kw.get(field_name)
 
         if kw == 'COMMENT':
-            # §7.8.5 — every comment line begins with the COMMENT keyword.
             for line_text in value:
-                out.write(f"COMMENT {line_text}\n")
+                entries.append(("_comment", line_text, None))
         elif kw is not None:
-            out.write(f"{kw} = {format_value(value)}\n")
+            # Resolve format spec: runtime override > model default.
+            spec = next(
+                (m.format_spec for m in field_info.metadata if isinstance(m, FieldMetadata)),
+                None,
+            )
+            if options and options.float_formats and kw in options.float_formats:
+                spec = options.float_formats[kw]
+            entries.append((kw, value, spec))
         elif isinstance(value, dict):
-            # USER_DEFINED_x pattern — spec §3.2.4.12, §4.2.4.10, §6.2.11.1.
             for k, v in value.items():
-                out.write(f"USER_DEFINED_{k} = {v}\n")
+                entries.append(("_user", k, v))
         # else: field has no FieldMetadata and is not a dict → skip.
+
+    # Phase 2 — write.
+    if align:
+        max_width = max(
+            (len(kw) for kw, _, _ in entries if kw not in ("_comment", "_user")),
+            default=0,
+        )
+    else:
+        max_width = 0
+
+    for kw, value, spec in entries:
+        if kw == "_comment":
+            # §7.8.5 — every comment line begins with the COMMENT keyword.
+            out.write(f"COMMENT {value}\n")
+        elif kw == "_user":
+            # USER_DEFINED_x pattern — spec §3.2.4.12, §4.2.4.10, §6.2.11.1.
+            user_kw = f"USER_DEFINED_{value}"
+            if align:
+                user_kw = f"{user_kw:{max_width}}"
+            out.write(f"{user_kw} = {spec}\n")  # spec holds the value here
+        else:
+            padded_kw = f"{kw:{max_width}}" if align else kw
+            out.write(f"{padded_kw} = {format_value(value, spec)}\n")
 
 
 def emit_block(
@@ -203,11 +174,12 @@ def emit_block(
     out: TextIO,
     *,
     extra_lines: list[str] | None = None,
+    options: "WriterOptions | None" = None,
 ) -> None:
     """
     Write a complete named block for model.
 
-    If model carries a _delineation PrivateAttr (OEM.Segment.Metadata,
+    If model carries a _delineation ClassVar (OEM.Segment.Metadata,
     OCM.TrajectoryStateBlock, …), the block is wrapped in its START/STOP
     keywords.  For flat models without Delineation (OPM.Metadata, etc.)
     the KVs are written with no delimiters.
@@ -217,12 +189,12 @@ def emit_block(
     states, maneuver lines, covariance rows) that are stored as list[str]
     without FieldMetadata.
     """
-    d = get_delineation(type(model))
-    if d:
-        out.write(f"{d.start}\n")
-    emit_kvs(model, out)
+    delineation = get_delineation(type(model))
+    if delineation:
+        out.write(f"{delineation.start}\n")
+    emit_kvs(model, out, options=options)
     if extra_lines:
         for line in extra_lines:
             out.write(f"{line}\n")
-    if d:
-        out.write(f"{d.stop}\n")
+    if delineation:
+        out.write(f"{delineation.stop}\n")

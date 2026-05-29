@@ -1,26 +1,26 @@
+"""Abstract base class for all CCSDS Orbit Data Message types."""
 from abc import ABC
 
 
 class CCSDSDataMessage(ABC):
-    """
-    Abstract base class for all CCSDS orbit data message types.
+    """Abstract base for all CCSDS ODM message types (OEM, OMM, OPM, OCM).
 
-    Cannot be instantiated directly. Used only as a type-hint target:
+    Cannot be instantiated directly; use one of the concrete subtypes. Exists
+    primarily as a type-hint target so that ``Reader.read()`` can declare a
+    return type that spans all four message types::
 
         def read(path: Path) -> CCSDSDataMessage: ...
 
-    Concrete message types multiply-inherit from this class and Pydantic's BaseModel:
+    Concrete subtypes use multiple inheritance::
 
         class OEM(CCSDSDataMessage, BaseModel): ...
 
-    MRO reasoning for class OEM(CCSDSDataMessage, BaseModel):
-      - CCSDSDataMessage.__mro__ = [CCSDSDataMessage, ABC, object]
-      - Pydantic v2's ModelMetaclass is a subclass of ABCMeta — no metaclass
-        conflict arises.
-      - C3 linearisation produces: OEM → CCSDSDataMessage → ABC → BaseModel
-        → ... → object. No ordering contradiction exists because ABC and
-        BaseModel both descend from object and neither appears in the other's
-        MRO above object.
+    The MRO is well-defined: Pydantic v2's ``ModelMetaclass`` is a subclass of
+    ``ABCMeta``, so no metaclass conflict arises, and C3 linearisation produces
+    a valid ordering.
+
+    Raises:
+        TypeError: If instantiated directly (i.e. ``CCSDSDataMessage()``).
     """
 
     def __new__(cls, *args, **kwargs):

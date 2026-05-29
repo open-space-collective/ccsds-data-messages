@@ -15,7 +15,7 @@ from .values import TimeSystem
 from .values import ManCovRefFrame
 
 
-_CCSDS_DATE_RE = re.compile(
+_CCSDS_DATE_RE: re.Pattern[str] = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?"
     r"|\d{4}-\d{3}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?"
 )
@@ -43,10 +43,24 @@ def _validate_ccsds_date(v: str, field_name: str) -> str:
 
 
 class OPM(CCSDSDataMessage, BaseModel):
+    """
+    Orbit Parameter Message (OPM).
+
+    Provides an orbital state at a given epoch as Cartesian state vector and/or
+    Keplerian elements, along with optional spacecraft parameters and maneuver data.
+    Used when the recipient needs a single-epoch state rather than an ephemeris
+    time series. The recipient is responsible for orbit propagation.
+    """
 
     class Header(BaseModel):
+        """OPM header block (CCSDS 502.0-B-3 table 3-1).
+
+        Contains the message version, optional comments and classification,
+        creation date, originator, and optional message ID.
+        """
+
         ccsds_opm_vers: Annotated[
-            str, 
+            str,
             Field(
                 description=(
                     "Format version in the form of 'x.y', where "
@@ -134,7 +148,7 @@ class OPM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -144,6 +158,12 @@ class OPM(CCSDSDataMessage, BaseModel):
             return _validate_ccsds_date(v, "creation_date")
 
     class Metadata(BaseModel):
+        """OPM metadata block (CCSDS 502.0-B-3 table 3-2).
+
+        Describes the object, reference frame, and time system.
+        Delimited by META_START / META_STOP in KVN format.
+        """
+
         # 7.8 Formatting rules
         comment: Annotated[
             list[str] | None,
@@ -233,21 +253,12 @@ class OPM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
         # The spec explicitly says "there is no CCSDS-based restriction on the value
-        # for this keyword" and calls the YYYY-NNNP{PP} format a recommendation
-        #
-        # @field_validator("object_id")
-        # @classmethod
-        # def validate_object_id(cls, v: str) -> str:
-        #     if v != "UNKNOWN" and not re.fullmatch(r"\d{4}-\d{3}[A-Z]+", v):
-        #         raise ValueError(
-        #             "object_id must be 'UNKNOWN' or match YYYY-NNNP{PP}, e.g. '2000-052A'"
-        #         )
-        #     return v
+        # for this keyword" and calls the YYYY-NNNP{PP} format a recommendation.
 
         # Should this be enforced? Specs only note is "only used in OMMs."
         @field_validator("ref_frame")
@@ -277,8 +288,20 @@ class OPM(CCSDSDataMessage, BaseModel):
             return self
 
     class Data(BaseModel):
+        """OPM data section (CCSDS 502.0-B-3 §3.3).
+
+        Contains the mandatory Cartesian state vector plus optional osculating Keplerian
+        elements, spacecraft parameters, covariance matrix, maneuver parameters, and
+        user-defined parameters.
+        """
 
         class StateVector(BaseModel):
+            """Cartesian state vector at a single epoch (CCSDS 502.0-B-3 §3.3.3).
+
+            Mandatory in every OPM. Provides position (km) and velocity (km/s)
+            in the reference frame declared in the metadata.
+            """
+
             # 7.8 Formatting rules
             comment: Annotated[
                 list[str] | None,
@@ -384,7 +407,7 @@ class OPM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
@@ -514,14 +537,14 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="GM",
-                    units="km**3/s**2",
+                    units="km**3/s**2", format_spec=" .1e",
                 ),
             ]
 
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
@@ -559,7 +582,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                     default=None,
                     description=(
                         "Spacecraft mass. [kg] "
-                        "Mandatory if any maneuver is defined (3.2.4.9)." # TBI: enforce this in check_maneuver_requires_mass
+                        "Mandatory if any maneuver is defined (3.2.4.9)."
                     ),
                 ),
                 FieldMetadata(
@@ -623,7 +646,7 @@ class OPM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
@@ -669,7 +692,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_X",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -683,7 +706,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_X",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -696,7 +719,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_Y",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -710,7 +733,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_X",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -723,7 +746,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_Y", 
-                    units="km**2"
+                    units="km**2", format_spec=" .15e"
                 ),
             ]
 
@@ -736,7 +759,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_Z",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -750,7 +773,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_X",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -763,7 +786,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_Y",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -776,7 +799,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_Z",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -789,7 +812,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_X_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -803,7 +826,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_X",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -816,7 +839,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_Y",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -829,7 +852,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_Z",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -842,7 +865,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_X_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -855,7 +878,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_Y_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -869,7 +892,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_X",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -882,7 +905,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Y",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -895,7 +918,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Z",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -908,7 +931,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_X_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
             cz_dot_y_dot: Annotated[
@@ -920,7 +943,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Y_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -933,46 +956,21 @@ class OPM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Z_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
             # The spec imposes no validity constraint beyond numeric format.
             # A zero variance (e.g., cx_x = 0.0) is expressible in double precision
-            # and passes all stated spec requirements, yet this check rejects it.
-            # The check adds a mathematical constraint that the spec does not mandate.
-            #
-            # @model_validator(mode="after")
-            # def check_covariance_positive_definite_proxy(self) -> "OEM.Data.CovarianceMatrixLines":
-            #     """
-            #     Proxy check for positive-definiteness: verifies all diagonal (variance)
-            #     elements are strictly positive. Necessary but not sufficient for a valid
-            #     covariance matrix. A full Cholesky-based check would be sufficient but
-            #     requires numpy or similar to be computationally efficient.
-            #     """
-            #     diagonal = [
-            #         ("CX_X", self.cx_x),
-            #         ("CY_Y", self.cy_y),
-            #         ("CZ_Z", self.cz_z),
-            #         ("CX_DOT_X_DOT", self.cx_dot_x_dot),
-            #         ("CY_DOT_Y_DOT", self.cy_dot_y_dot),
-            #         ("CZ_DOT_Z_DOT", self.cz_dot_z_dot),
-            #     ]
-            #     non_positive = [kw for kw, v in diagonal if v <= 0]
-            #     if non_positive:
-            #         raise ValueError(
-            #             f"Covariance diagonal elements must be strictly positive "
-            #             f"(variance cannot be zero or negative). "
-            #             f"Failing elements: {', '.join(non_positive)}"
-            #         )
-            #     return self
+            # and passes all stated spec requirements. A positive-definiteness check
+            # would add a mathematical constraint the spec does not mandate.
 
         class ManeuverParameters(BaseModel):
             """
@@ -1090,7 +1088,7 @@ class OPM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 

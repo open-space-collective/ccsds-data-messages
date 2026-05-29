@@ -69,6 +69,15 @@ class XMLOCMReader:
     """
 
     def read(self, path: Path) -> OCM:
+        """Reads an XML OCM file and returns a validated OCM domain model.
+
+        Args:
+            path: Path to the XML OCM file.
+
+        Returns:
+            A fully validated OCM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         root = parse_xml_file(path)
         version = root.attrib.get("version", "3.0")
 

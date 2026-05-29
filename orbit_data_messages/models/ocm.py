@@ -1,9 +1,9 @@
 import re
 from typing import Annotated
+from typing import ClassVar
 
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic import PrivateAttr
 from pydantic import field_validator
 from pydantic import model_validator
 
@@ -68,6 +68,12 @@ class OCM(CCSDSDataMessage, BaseModel):
     """
 
     class Header(BaseModel):
+        """OCM header block (CCSDS 502.0-B-3 table 6-1).
+
+        Contains the message version, optional comments and classification,
+        creation date, originator, and optional message ID.
+        """
+
         ccsds_ocm_vers: Annotated[
             str,
             Field(
@@ -152,7 +158,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -179,9 +185,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         it should be provided when NEXT_LEAP_EPOCH is supplied (table 6-3).
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("META_START", "META_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("META_START", "META_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -746,7 +750,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -820,9 +824,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         time history here>' is marked M).
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("TRAJ_START", "TRAJ_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("TRAJ_START", "TRAJ_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -1076,7 +1078,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -1139,9 +1141,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         is provided and its epoch is not intrinsic to the frame definition.
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("PHYS_START", "PHYS_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("PHYS_START", "PHYS_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -1694,7 +1694,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -1734,9 +1734,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         and COV_ORDERING. At least one data line is required (table 6-6).
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("COV_START", "COV_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("COV_START", "COV_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -1919,7 +1917,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -1969,9 +1967,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         vectors. Per 7.6 they are stored as single strings (the three numbers on one line).
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("MAN_START", "MAN_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("MAN_START", "MAN_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -2366,7 +2362,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -2525,9 +2521,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         All fields are optional (table 6-10).
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("PERT_START", "PERT_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("PERT_START", "PERT_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -2884,7 +2878,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -2924,9 +2918,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         OCM model_validator.
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("OD_START", "OD_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("OD_START", "OD_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -3260,7 +3252,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -3282,9 +3274,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         At least one user-defined entry is required if this block is present.
         """
 
-        _delineation: Delineation = PrivateAttr(
-            default_factory=lambda: Delineation("USER_START", "USER_STOP")
-        )
+        _delineation: ClassVar[Delineation] = Delineation("USER_START", "USER_STOP")
 
         comment: Annotated[
             list[str] | None,
@@ -3309,7 +3299,7 @@ class OCM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 

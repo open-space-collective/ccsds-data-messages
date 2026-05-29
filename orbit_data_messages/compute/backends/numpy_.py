@@ -1,21 +1,21 @@
 """
-NumPy compute backend.
+NumPy compute backend for the ``orbit_data_messages`` package.
 
-Implements EphemerisBackend and CovarianceBackend using numpy arrays.
+Satisfies ``EphemerisBackend`` and ``CovarianceBackend`` protocols.
+Requires ``numpy``.
 
 The numpy import is guarded at module top: importing this module raises
-ImportError with install instructions if numpy is not available.
+``ImportError`` with install instructions if numpy is not available.
 
-Fully implemented
------------------
-position, velocity, acceleration, parse_epoch, to_array, steps,
-state_to_line, ephemeris_data_from_array,
-covariance_to_array, covariance_from_array.
+Fully implemented:
+    position, velocity, acceleration, parse_epoch, to_array, steps,
+    state_to_line, ephemeris_data_from_array,
+    covariance_to_array, covariance_from_array.
 
-Raises NotImplementedError
---------------------------
-trajectory_from_ephemeris, interpolate, ephemeris_data_from_trajectory
-(these require an interpolation library or OSTk; use OSTkBackend instead).
+Raises NotImplementedError:
+    trajectory_from_ephemeris, interpolate, ephemeris_data_from_trajectory
+    (these require an interpolation library or OSTk; use ``OSTkBackend``
+    instead).
 """
 from __future__ import annotations
 
@@ -39,7 +39,17 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 def _build_cov_layout() -> tuple[list[str], list[tuple[int, int]]]:
-    """Return (field_names, (row,col) positions) for the 21 LTM elements."""
+    """Build the covariance lower-triangular-matrix field list and position map.
+
+    Derives field names from ``CovarianceMatrixLines.model_fields`` at import
+    time so the layout stays in sync with the domain model automatically.
+
+    Returns:
+        A tuple ``(field_names, positions)`` where ``field_names`` is the
+        ordered list of the 21 LTM field names and ``positions`` is the
+        corresponding list of ``(row, col)`` 0-indexed positions in a 6×6
+        lower-triangular matrix.
+    """
     from orbit_data_messages.models.oem import OEM as _OEM
     _CML = _OEM.Segment.CovarianceMatrix.CovarianceMatrixLines
     fields = [fn for fn in _CML.model_fields if fn not in ("epoch", "cov_ref_frame")]
@@ -63,18 +73,35 @@ _COV_FIELDS, _COV_POSITIONS = _build_cov_layout()
 # ---------------------------------------------------------------------------
 
 def _to_datetime64(epoch: str) -> np.datetime64:
-    """Parse a CCSDS §7.5.10 epoch string to np.datetime64."""
-    return np.datetime64(epoch.rstrip("Z").replace("Z", ""))
+    """Convert a CCSDS epoch string to ``np.datetime64``.
+
+    Args:
+        epoch: A CCSDS §7.5.10 epoch string, optionally trailing ``Z``.
+
+    Returns:
+        A ``np.datetime64`` value with microsecond precision.
+    """
+    return np.datetime64(epoch.rstrip("Z"))
 
 
 def _from_datetime64(dt64: np.datetime64) -> str:
-    """Format a np.datetime64 to a CCSDS calendar epoch string."""
-    # Normalise to microsecond precision then format.
-    s = str(np.datetime64(dt64, "us"))
+    """Convert a ``np.datetime64`` to a CCSDS epoch string.
+
+    Normalizes to microsecond precision, then strips trailing zeros from the
+    fractional-seconds part.
+
+    Args:
+        dt64: A ``np.datetime64`` value.
+
+    Returns:
+        A CCSDS-format epoch string without trailing ``Z``.
+    """
+    # Normalize to microsecond precision then format.
+    epoch_str = str(np.datetime64(dt64, "us"))
     # np formats as '2025-01-01T00:00:00.000000' — strip trailing zeros.
-    if "." in s:
-        s = s.rstrip("0").rstrip(".")
-    return s
+    if "." in epoch_str:
+        epoch_str = epoch_str.rstrip("0").rstrip(".")
+    return epoch_str
 
 
 # ---------------------------------------------------------------------------
@@ -82,10 +109,10 @@ def _from_datetime64(dt64: np.datetime64) -> str:
 # ---------------------------------------------------------------------------
 
 class NumpyBackend:
-    """
-    Compute backend using numpy.
+    """Compute backend using numpy.
 
-    Satisfies EphemerisBackend and CovarianceBackend protocols structurally.
+    Satisfies ``EphemerisBackend`` and ``CovarianceBackend`` protocols.
+    Requires ``numpy``.
     """
 
     # ------------------------------------------------------------------
@@ -96,27 +123,64 @@ class NumpyBackend:
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> np.ndarray:
-        """Return position vector as a (3,) float64 array in km."""
+        """Return the position vector as a numpy array.
+
+        Direction: domain → external.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            A ``(3,)`` float64 array ``[x, y, z]`` in km.
+        """
         return np.array([line.x, line.y, line.z], dtype=np.float64)
 
     def velocity(
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> np.ndarray:
-        """Return velocity vector as a (3,) float64 array in km/s."""
+        """Return the velocity vector as a numpy array.
+
+        Direction: domain → external.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            A ``(3,)`` float64 array ``[x_dot, y_dot, z_dot]`` in km/s.
+        """
         return np.array([line.x_dot, line.y_dot, line.z_dot], dtype=np.float64)
 
     def acceleration(
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> np.ndarray | None:
-        """Return acceleration vector as a (3,) float64 array in km/s², or None."""
+        """Return the acceleration vector as a numpy array, or ``None``.
+
+        Direction: domain → external.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            A ``(3,)`` float64 array ``[x_ddot, y_ddot, z_ddot]`` in km/s²,
+            or ``None`` when no acceleration is present.
+        """
         if line.x_ddot is None:
             return None
         return np.array([line.x_ddot, line.y_ddot, line.z_ddot], dtype=np.float64)
 
     def parse_epoch(self, epoch: str) -> np.datetime64:
-        """Parse a CCSDS §7.5.10 epoch string to np.datetime64 (microsecond)."""
+        """Parse a CCSDS §7.5.10 epoch string to ``np.datetime64``.
+
+        Direction: external string → numpy epoch type.
+
+        Args:
+            epoch: A CCSDS-format epoch string.
+
+        Returns:
+            A ``np.datetime64`` value with microsecond precision.
+        """
         return _to_datetime64(epoch)
 
     # ------------------------------------------------------------------
@@ -124,12 +188,19 @@ class NumpyBackend:
     # ------------------------------------------------------------------
 
     def to_array(self, data: OEM.Segment.EphemerisData) -> np.ndarray:
-        """
-        Return a (N, 6) or (N, 9) float64 array.
+        """Convert ``EphemerisData`` to a float64 numpy array.
 
-        Shape (N, 6) when no line carries acceleration components;
-        shape (N, 9) when every line carries them.  Not always one or the
-        other: determined per-segment from the actual data.
+        Direction: domain → external.
+
+        Shape is ``(N, 6)`` when no line carries acceleration components;
+        ``(N, 9)`` when every line carries them.  The shape is determined
+        per-segment from the actual data, not assumed.
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+
+        Returns:
+            A float64 numpy array of shape ``(N, 6)`` or ``(N, 9)``.
         """
         lines = data.ephemeris_data_lines
         has_accel = all(line.x_ddot is not None for line in lines)
@@ -153,6 +224,18 @@ class NumpyBackend:
         self,
         data: OEM.Segment.EphemerisData,
     ) -> Any:
+        """Raise ``NotImplementedError``; trajectory construction requires OSTk.
+
+        Direction: domain → external (not implemented).
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+
+        Raises:
+            NotImplementedError: Always.  Install the ``ostk`` extra
+                (``pip install orbit-data-messages[ostk]``) and use
+                ``OSTkBackend``.
+        """
         raise NotImplementedError(
             "trajectory_from_ephemeris requires OSTk. "
             "Install the 'ostk' extra and use OSTkBackend."
@@ -167,6 +250,18 @@ class NumpyBackend:
         data: OEM.Segment.EphemerisData,
         epoch: Any,
     ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
+        """Raise ``NotImplementedError``; interpolation is not yet implemented.
+
+        Direction: domain + external epoch → domain (not implemented).
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+            epoch: The target epoch.
+
+        Raises:
+            NotImplementedError: Always.  Use ``OSTkBackend`` for
+                Hermite/Lagrange interpolation.
+        """
         raise NotImplementedError(
             "NumpyBackend does not yet implement interpolation. "
             "Use OSTkBackend for Hermite/Lagrange interpolation."
@@ -178,9 +273,18 @@ class NumpyBackend:
         stop: np.datetime64,
         step: float,
     ) -> list[np.datetime64]:
-        """
-        Generate epoch values from start to stop (inclusive) at step seconds.
-        start and stop must be np.datetime64 (as returned by parse_epoch).
+        """Generate ``np.datetime64`` epoch values from ``start`` to ``stop``.
+
+        ``start`` and ``stop`` must be ``np.datetime64`` as returned by
+        ``parse_epoch``.
+
+        Args:
+            start: Start epoch as ``np.datetime64``.
+            stop: Stop epoch as ``np.datetime64`` (inclusive).
+            step: Step size in seconds.
+
+        Returns:
+            A list of ``np.datetime64`` values covering the interval.
         """
         step_us = np.timedelta64(round(step * 1_000_000), "us")
         result: list[np.datetime64] = []
@@ -200,12 +304,26 @@ class NumpyBackend:
         arr: np.ndarray,
         epochs: list[str],
     ) -> OEM.Segment.EphemerisData:
-        """
-        Construct a validated EphemerisData from a (N, 6|9) float64 array
-        and CCSDS epoch strings.
+        """Construct a validated ``EphemerisData`` from a float64 array and epoch strings.
 
-        Numpy scalars are explicitly converted to Python float before being
+        Direction: external → domain.
+
+        Numpy scalars are explicitly converted to Python ``float`` before being
         passed to the domain model, so Pydantic receives plain Python types.
+
+        Args:
+            arr: A float64 numpy array of shape ``(N, 6)`` or ``(N, 9)``.
+                Columns are ``[x, y, z, x_dot, y_dot, z_dot]`` with optional
+                acceleration appended.
+            epochs: A list of N CCSDS §7.5.10 epoch strings.
+
+        Returns:
+            A fully validated ``EphemerisData`` instance.  Pydantic validation
+            fires on construction.
+
+        Raises:
+            ValueError: If the number of rows does not match ``len(epochs)``,
+                or if ``arr`` does not have 6 or 9 columns.
         """
         from orbit_data_messages.models.oem import OEM as _OEM  # lazy import
 
@@ -242,6 +360,18 @@ class NumpyBackend:
         self,
         trajectory: Any,
     ) -> OEM.Segment.EphemerisData:
+        """Raise ``NotImplementedError``; trajectory conversion requires OSTk.
+
+        Direction: external → domain (not implemented).
+
+        Args:
+            trajectory: A trajectory object from an external library.
+
+        Raises:
+            NotImplementedError: Always.  Install the ``ostk`` extra
+                (``pip install orbit-data-messages[ostk]``) and use
+                ``OSTkBackend``.
+        """
         raise NotImplementedError(
             "ephemeris_data_from_trajectory requires OSTk. "
             "Install the 'ostk' extra and use OSTkBackend."
@@ -252,9 +382,22 @@ class NumpyBackend:
         state: np.ndarray,
         epoch: str,
     ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
-        """
-        Convert a 1-D numpy array of 6 or 9 elements and a CCSDS epoch string
-        to a validated EphemerisDataLine.
+        """Convert a 1-D numpy state array and a CCSDS epoch string to a data line.
+
+        Direction: external → domain.
+
+        Args:
+            state: A 1-D numpy array of 6 or 9 elements in the order
+                ``[x, y, z, x_dot, y_dot, z_dot]`` (with optional
+                acceleration appended).
+            epoch: A CCSDS §7.5.10 epoch string.
+
+        Returns:
+            A fully validated ``EphemerisDataLine``.  Pydantic validation fires
+            on construction.
+
+        Raises:
+            ValueError: If ``state`` does not have 6 or 9 elements.
         """
         from orbit_data_messages.models.oem import OEM as _OEM  # lazy import
 
@@ -284,11 +427,18 @@ class NumpyBackend:
         self,
         cov: OEM.Segment.CovarianceMatrix,
     ) -> np.ndarray:
-        """
-        Return a (N, 6, 6) float64 array.
+        """Convert a ``CovarianceMatrix`` to a float64 numpy array.
 
-        The symmetric 6×6 matrix is reconstructed from the 21 LTM elements
-        stored in each CovarianceMatrixLines entry.
+        Direction: domain → external.
+
+        Reconstruct the symmetric 6×6 matrix from the 21 lower-triangular
+        elements stored in each ``CovarianceMatrixLines`` entry.
+
+        Args:
+            cov: A validated ``CovarianceMatrix`` instance.
+
+        Returns:
+            A float64 numpy array of shape ``(N, 6, 6)``.
         """
         n = len(cov.covariance_matrix_lines)
         out = np.zeros((n, 6, 6), dtype=np.float64)
@@ -309,12 +459,27 @@ class NumpyBackend:
         epochs: list[str],
         cov_ref_frame: str | None = None,
     ) -> OEM.Segment.CovarianceMatrix:
-        """
-        Construct a validated CovarianceMatrix from a (N, 6, 6) float64
-        array and CCSDS epoch strings.
+        """Construct a validated ``CovarianceMatrix`` from a float64 array and epoch strings.
 
-        Only lower-triangular elements arr[i, r, c] are read.
-        float() conversion ensures Pydantic receives Python scalars.
+        Direction: external → domain.
+
+        Only lower-triangular elements ``arr[i, r, c]`` are read.
+        ``float()`` conversion ensures Pydantic receives Python scalars rather
+        than numpy scalars.
+
+        Args:
+            arr: A float64 numpy array of shape ``(N, 6, 6)``.
+            epochs: A list of N CCSDS §7.5.10 epoch strings.
+            cov_ref_frame: Optional reference frame string.  When ``None``, no
+                ``COV_REF_FRAME`` keyword is set on the resulting lines.
+
+        Returns:
+            A fully validated ``CovarianceMatrix`` instance.  Pydantic
+            validation fires on construction.
+
+        Raises:
+            ValueError: If ``arr`` is not shape ``(N, 6, 6)`` or
+                ``len(arr) != len(epochs)``.
         """
         from orbit_data_messages.models.oem import OEM as _OEM  # lazy import
 

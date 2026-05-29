@@ -147,44 +147,53 @@ class KVNOPMReader:
     """
 
     def read(self, path: Path) -> OPM:
+        """Reads a KVN OPM file and returns a validated OPM domain model.
+
+        Args:
+            path: Path to the KVN OPM file.
+
+        Returns:
+            A fully validated OPM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         text = path.read_text()
         raw = parse_kvn(text)
         ordered = raw.get("header_ordered_items", [])
 
-        d = _dispatch_flat(ordered)
+        parsed = _dispatch_flat(ordered)
 
         header = OPM.Header(
-            **map_kvs(d["header_kvs"], d["header_comments"], OPM.Header)
+            **map_kvs(parsed["header_kvs"], parsed["header_comments"], OPM.Header)
         )
         metadata = OPM.Metadata(
-            **map_kvs(d["meta_kvs"], d["meta_comments"], OPM.Metadata)
+            **map_kvs(parsed["meta_kvs"], parsed["meta_comments"], OPM.Metadata)
         )
 
         state_vector = OPM.Data.StateVector(
-            **map_kvs(d["sv_kvs"], d["sv_comments"], OPM.Data.StateVector)
+            **map_kvs(parsed["sv_kvs"], parsed["sv_comments"], OPM.Data.StateVector)
         )
         keplerian = (
             OPM.Data.OsculatingKeplerianElements(
-                **map_kvs(d["ke_kvs"], d["ke_comments"],
+                **map_kvs(parsed["ke_kvs"], parsed["ke_comments"],
                           OPM.Data.OsculatingKeplerianElements)
             )
-            if d["ke_kvs"]
+            if parsed["ke_kvs"]
             else None
         )
         spacecraft = (
             OPM.Data.SpacecraftParameters(
-                **map_kvs(d["sp_kvs"], d["sp_comments"],
+                **map_kvs(parsed["sp_kvs"], parsed["sp_comments"],
                           OPM.Data.SpacecraftParameters)
             )
-            if d["sp_kvs"]
+            if parsed["sp_kvs"]
             else None
         )
         cov = (
             OPM.Data.CovarianceMatrix(
-                **map_kvs(d["cov_kvs"], d["cov_comments"],
+                **map_kvs(parsed["cov_kvs"], parsed["cov_comments"],
                           OPM.Data.CovarianceMatrix)
             )
-            if d["cov_kvs"]
+            if parsed["cov_kvs"]
             else None
         )
         maneuvers = (
@@ -192,15 +201,15 @@ class KVNOPMReader:
                 OPM.Data.ManeuverParameters(
                     **map_kvs(kvs, comments, OPM.Data.ManeuverParameters)
                 )
-                for kvs, comments in d["man_groups"]
+                for kvs, comments in parsed["man_groups"]
             ]
             or None
         )
         user = (
             OPM.Data.UserDefinedParameters(
-                **map_kvs(d["user_kvs"], [], OPM.Data.UserDefinedParameters)
+                **map_kvs(parsed["user_kvs"], [], OPM.Data.UserDefinedParameters)
             )
-            if d["user_kvs"]
+            if parsed["user_kvs"]
             else None
         )
 

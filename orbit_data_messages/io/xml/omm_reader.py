@@ -48,6 +48,15 @@ class XMLOMMReader:
     """
 
     def read(self, path: Path) -> OMM:
+        """Reads an XML OMM file and returns a validated OMM domain model.
+
+        Args:
+            path: Path to the XML OMM file.
+
+        Returns:
+            A fully validated OMM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         root = parse_xml_file(path)
         version = root.attrib.get("version", "3.0")
 

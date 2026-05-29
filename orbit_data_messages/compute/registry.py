@@ -47,20 +47,22 @@ _local = threading.local()
 # ---------------------------------------------------------------------------
 
 def backend(name: str) -> Any:
-    """
-    Instantiate and return the named backend.
+    """Instantiate and return the named backend.
 
     Backend classes are imported lazily — calling this function is the first
     time the corresponding module is loaded.
 
-    Parameters
-    ----------
-    name : 'pure' | 'numpy' | 'ostk'
+    Args:
+        name: Backend identifier — ``'pure'``, ``'numpy'``, or ``'ostk'``.
 
-    Raises
-    ------
-    ValueError  : unknown backend name
-    ImportError : required extra not installed (e.g., numpy)
+    Returns:
+        A freshly instantiated backend object for the given name.
+
+    Raises:
+        ValueError: If ``name`` is not a registered backend. The error message
+            lists all available backend names.
+        ImportError: If the required optional extra is not installed (e.g.
+            numpy for ``'numpy'``, OSTk for ``'ostk'``).
     """
     reference = _REGISTRY.get(name)
     if reference is None:
@@ -76,12 +78,15 @@ def backend(name: str) -> Any:
 
 
 def current_backend() -> Any:
-    """
-    Return the backend at the top of the thread-local stack.
+    """Return the backend at the top of the thread-local stack.
 
-    Never raises.  When no ``using_backend`` context is active on this
-    thread, returns a fresh ``PurePythonBackend()`` instance — the only
-    backend that works without any optional extras installed.
+    Never raises. When no ``using_backend`` context is active on this thread,
+    returns a fresh ``PurePythonBackend()`` instance — the only backend that
+    works without any optional extras installed.
+
+    Returns:
+        The active backend for the current thread, or a ``PurePythonBackend()``
+        if no ``using_backend`` context is active.
     """
     stack: list[Any] = getattr(_local, "stack", [])
     if stack:
@@ -93,27 +98,39 @@ def current_backend() -> Any:
 
 @contextmanager
 def using_backend(name: str) -> Iterator[Any]:
-    """
-    Push a backend onto the thread-local stack for the duration of the block.
+    """Push a backend onto the thread-local stack for the duration of the block.
 
-    Yields the instantiated backend so it can be passed to views explicitly::
+    Yields the instantiated backend so it can be passed to views explicitly.
+    Nesting is supported — the inner context overrides the outer one; the outer
+    is restored on exit.
 
-        with using_backend("numpy") as b:
-            view = EphemerisView(data, backend=b)
+    Args:
+        name: Backend identifier — ``'pure'``, ``'numpy'``, or ``'ostk'``.
 
-    Nesting is supported — the inner context overrides the outer one; the
-    outer is restored on exit::
+    Yields:
+        The instantiated backend for ``name``, active for the duration of the
+        ``with`` block.
 
-        with using_backend("pure") as b_outer:
-            with using_backend("numpy") as b_inner:
-                assert current_backend() is b_inner
-            assert current_backend() is b_outer
+    Raises:
+        ValueError: If ``name`` is not a registered backend.
+        ImportError: If the required optional extra is not installed.
 
-    .. warning::
-        **Thread-local; not safe for asyncio.**
-        Concurrent coroutines running on the same OS thread share the same
-        stack, so the context manager cannot isolate backends across
-        coroutines.  Use the explicit ``backend=`` parameter instead.
+    Note:
+        Thread-local; not safe for use with asyncio or other concurrency
+        primitives. Concurrent coroutines running on the same OS thread share
+        the same stack, so the context manager cannot isolate backends across
+        coroutines. Use the explicit ``backend=`` parameter instead.
+
+    Example:
+        >>> with using_backend("numpy") as b:
+        ...     view = EphemerisView(data, backend=b)
+
+        Nesting::
+
+            with using_backend("pure") as b_outer:
+                with using_backend("numpy") as b_inner:
+                    assert current_backend() is b_inner
+                assert current_backend() is b_outer
     """
     b = backend(name)
     if not hasattr(_local, "stack"):

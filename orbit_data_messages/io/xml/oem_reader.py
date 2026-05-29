@@ -52,6 +52,15 @@ class XMLOEMReader:
     """
 
     def read(self, path: Path) -> OEM:
+        """Reads an XML OEM file and returns a validated OEM domain model.
+
+        Args:
+            path: Path to the XML OEM file.
+
+        Returns:
+            A fully validated OEM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         root = parse_xml_file(path)
         version = root.attrib.get("version", "2.0")
 

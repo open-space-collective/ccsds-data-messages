@@ -3,13 +3,13 @@ Adapter registry for CCSDS Orbit Data Message I/O.
 
 Maps (format, message_type) pairs to reader and writer adapter classes using
 lazy string references — no adapter module is imported at registry load time.
+Adapter classes are lazily imported on first request.
 
 Adding a new adapter requires one new entry in _READERS or _WRITERS only.
 
-Usage
------
-    reader = get_reader("kvn", "oem")   # returns KVNOEMReader()
-    writer = get_writer("kvn", "opm")   # returns KVNOPMWriter()
+Example:
+    >>> reader = get_reader("kvn", "oem")   # returns KVNOEMReader()
+    >>> writer = get_writer("kvn", "opm")   # returns KVNOPMWriter()
 """
 from __future__ import annotations
 
@@ -50,12 +50,18 @@ _WRITERS: dict[tuple[str, str], str] = {
 # ---------------------------------------------------------------------------
 
 def _load(reference: str) -> object:
+    """Resolve a 'module_path:ClassName' string, import the module, and return a fresh instance.
+
+    Python's import machinery caches the module after the first import, so
+    subsequent calls are cheap.
+
+    Args:
+        reference: A string of the form ``"module.path:ClassName"``.
+
+    Returns:
+        A freshly instantiated adapter object of the named class.
     """
-    Resolve a 'module_path:ClassName' string, import the module, and return
-    a fresh adapter instance.  Python's import machinery caches the module
-    after the first import, so subsequent calls are cheap.
-    """
-    module_path, class_name = reference.split(":")
+    module_path, class_name = reference.rsplit(":", 1)
     module = importlib.import_module(module_path)
     cls = getattr(module, class_name)
     return cls()
@@ -66,19 +72,18 @@ def _load(reference: str) -> object:
 # ---------------------------------------------------------------------------
 
 def get_reader(fmt: str, msg_type: str) -> object:
-    """
-    Return an instantiated reader adapter for (fmt, msg_type).
+    """Return an instantiated reader adapter for the given format and message type.
 
-    Parameters
-    ----------
-    fmt      : 'kvn' | 'xml'
-    msg_type : 'oem' | 'omm' | 'opm' | 'ocm'
+    Args:
+        fmt: File format — ``'kvn'`` or ``'xml'``.
+        msg_type: CCSDS message type — ``'oem'``, ``'omm'``, ``'opm'``, or ``'ocm'``.
 
-    Raises
-    ------
-    ValueError
-        When the (fmt, msg_type) pair is not registered.  The error message
-        lists all currently registered combinations.
+    Returns:
+        A freshly instantiated reader adapter satisfying ``MessageReaderPort``.
+
+    Raises:
+        ValueError: If the (fmt, msg_type) pair is not registered. The error
+            message lists all currently registered combinations.
     """
     key = (fmt, msg_type)
     reference = _READERS.get(key)
@@ -92,19 +97,18 @@ def get_reader(fmt: str, msg_type: str) -> object:
 
 
 def get_writer(fmt: str, msg_type: str) -> object:
-    """
-    Return an instantiated writer adapter for (fmt, msg_type).
+    """Return an instantiated writer adapter for the given format and message type.
 
-    Parameters
-    ----------
-    fmt      : 'kvn' | 'xml'
-    msg_type : 'oem' | 'omm' | 'opm' | 'ocm'
+    Args:
+        fmt: File format — ``'kvn'`` or ``'xml'``.
+        msg_type: CCSDS message type — ``'oem'``, ``'omm'``, ``'opm'``, or ``'ocm'``.
 
-    Raises
-    ------
-    ValueError
-        When the (fmt, msg_type) pair is not registered.  The error message
-        lists all currently registered combinations.
+    Returns:
+        A freshly instantiated writer adapter satisfying ``MessageWriterPort``.
+
+    Raises:
+        ValueError: If the (fmt, msg_type) pair is not registered. The error
+            message lists all currently registered combinations.
     """
     key = (fmt, msg_type)
     reference = _WRITERS.get(key)

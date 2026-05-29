@@ -59,6 +59,15 @@ class KVNOCMReader:
     """
 
     def read(self, path: Path) -> OCM:
+        """Reads a KVN OCM file and returns a validated OCM domain model.
+
+        Args:
+            path: Path to the KVN OCM file.
+
+        Returns:
+            A fully validated OCM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         text = path.read_text()
         raw = parse_kvn(text)
         sections = split_blocks(raw)
@@ -82,22 +91,22 @@ class KVNOCMReader:
         for sec in sections[1:]:
             if sec["type"] != "block":
                 continue
-            d = sec["delimiter"]
-            if d == _META_D:
+            delimiter = sec["delimiter"]
+            if delimiter == _META_D:
                 meta_block = sec
-            elif d == _TRAJ_D:
+            elif delimiter == _TRAJ_D:
                 traj_blocks.append(sec)
-            elif d == _PHYS_D:
+            elif delimiter == _PHYS_D:
                 phys_block = sec
-            elif d == _COV_D:
+            elif delimiter == _COV_D:
                 cov_blocks.append(sec)
-            elif d == _MAN_D:
+            elif delimiter == _MAN_D:
                 man_blocks.append(sec)
-            elif d == _PERT_D:
+            elif delimiter == _PERT_D:
                 pert_block = sec
-            elif d == _OD_D:
+            elif delimiter == _OD_D:
                 od_block = sec
-            elif d == _USER_D:
+            elif delimiter == _USER_D:
                 user_block = sec
 
         if meta_block is None:

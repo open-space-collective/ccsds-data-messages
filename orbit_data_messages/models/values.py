@@ -1,15 +1,24 @@
+"""StrEnum classes for CCSDS ODM controlled vocabulary.
+
+Covers orbit centers (``CenterName``), reference frames (``RefFrame``), time
+systems (``TimeSystem``), and maneuver/covariance reference frames
+(``ManCovRefFrame``).  Values are taken directly from the authoritative SANA
+registries cited in CCSDS 502.0-B-3 Annex B.
+"""
 from enum import StrEnum
 
 
 class CenterName(StrEnum):
-    """
-    Orbit center values for CENTER_NAME keyword (Annex B2).
-    Authoritative source: SANA Registry of Orbit Centers
+    """Valid values for the ``CENTER_NAME`` keyword (CCSDS 502.0-B-3 Annex B2).
+
+    Authoritative source: SANA Registry of Orbit Centers —
     https://sanaregistry.org/r/orbit_centers
 
-    Note: enum member names differ from values where values contain
-    characters illegal in Python identifiers (spaces, hyphens, slashes,
-    leading digits). The .value is always the authoritative SANA string.
+    Note:
+        Member names differ from values where the SANA string contains
+        characters illegal in Python identifiers (spaces, hyphens, slashes,
+        leading digits). ``member.value`` always returns the authoritative
+        SANA string.
     """
     # Sun, Planets, and Associated Dynamical Points
     SUN                  = "SUN"
@@ -99,9 +108,9 @@ class CenterName(StrEnum):
 
 
 class RefFrame(StrEnum):
-    """
-    Reference frame values for REF_FRAME keyword (3.2.3.3).
-    Authoritative source: SANA Registry of Celestial Body Reference Frames (Annex B4)
+    """Valid values for the ``REF_FRAME`` keyword (CCSDS 502.0-B-3 §3.2.3.3).
+
+    Authoritative source: SANA Registry of Celestial Body Reference Frames (Annex B4) —
     https://sanaregistry.org/r/celestial_body_reference_frames
     """
     EME2000  = "EME2000"   # Earth Mean Equator and Equinox of J2000
@@ -118,9 +127,9 @@ class RefFrame(StrEnum):
 
 
 class TimeSystem(StrEnum):
-    """
-    Time system values for TIME_SYSTEM keyword (3.2.3.2).
-    Authoritative source: SANA Registry of Time Systems (Annex B3)
+    """Valid values for the ``TIME_SYSTEM`` keyword (CCSDS 502.0-B-3 §3.2.3.2).
+
+    Authoritative source: SANA Registry of Time Systems (Annex B3) —
     https://sanaregistry.org/r/time_systems
     """
     GMST = "GMST"  # Greenwich Mean Sidereal Time
@@ -138,9 +147,9 @@ class TimeSystem(StrEnum):
 
 
 class ManCovRefFrame(StrEnum):
-    """
-    Reference frame values for MAN_REF_FRAME and COV_REF_FRAME keywords (3.2.4.11).
-    Authoritative source: SANA Registry of Orbit-Relative Reference Frames (Annex B5)
+    """Valid values for ``MAN_REF_FRAME`` and ``COV_REF_FRAME`` keywords (CCSDS 502.0-B-3 §3.2.4.11).
+
+    Authoritative source: SANA Registry of Orbit-Relative Reference Frames (Annex B5) —
     https://sanaregistry.org/r/orbit_relative_reference_frames
     """
     RSW = "RSW"  # Another name for 'Radial, Transverse, Normal'

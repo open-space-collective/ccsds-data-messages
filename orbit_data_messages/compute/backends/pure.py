@@ -1,76 +1,33 @@
 """
-Pure-Python compute backend.
+Pure-Python compute backend for the ``orbit_data_messages`` package.
 
-Implements EphemerisBackend and CovarianceBackend using Python stdlib only
-(no numpy, OSTk, astropy, or any optional dependency).
+Satisfies ``EphemerisBackend`` and ``CovarianceBackend`` protocols.
+Requires no optional dependencies.
 
-Every test that requires a backend can use PurePythonBackend without
+Every test that requires a backend can use ``PurePythonBackend`` without
 installing any extra.  Methods that need a numerical library raise
-NotImplementedError with a clear message that names the required extra.
+``NotImplementedError`` with a clear message that names the required extra.
 
-Fully implemented
------------------
-position, velocity, acceleration, parse_epoch, to_array, steps,
-ephemeris_data_from_array, covariance_to_array, covariance_from_array.
+Fully implemented:
+    position, velocity, acceleration, parse_epoch, to_array, steps,
+    ephemeris_data_from_array, covariance_to_array, covariance_from_array.
 
-Raises NotImplementedError
---------------------------
-trajectory_from_ephemeris, interpolate, ephemeris_data_from_trajectory,
-state_to_line  (each names the extra that would enable it).
+Raises NotImplementedError:
+    trajectory_from_ephemeris, interpolate, ephemeris_data_from_trajectory,
+    state_to_line  (each names the extra that would enable it).
 """
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
 from typing import TYPE_CHECKING
 
+from orbit_data_messages.models._epoch import format_ccsds_epoch
+from orbit_data_messages.models._epoch import parse_ccsds_epoch
+
 if TYPE_CHECKING:
     from orbit_data_messages.models.oem import OEM
-
-
-# ---------------------------------------------------------------------------
-# Epoch parsing  (§7.5.10 — calendar and day-of-year formats)
-# ---------------------------------------------------------------------------
-
-_DOY_RE = re.compile(r"^\d{4}-(\d{3})T")
-
-
-def _parse_epoch(epoch: str) -> datetime:
-    """
-    Parse a CCSDS §7.5.10 epoch string to a stdlib datetime.
-
-    Handles both calendar (YYYY-MM-DDThh:mm:ss) and day-of-year
-    (YYYY-DOYThh:mm:ss) formats, with optional fractional seconds and
-    trailing 'Z'.
-    """
-    e = epoch.rstrip("Z")
-
-    if _DOY_RE.match(e):
-        # Day-of-year: YYYY-DOYThh:mm:ss[.d]
-        date_part, time_part = e.split("T", 1)
-        year = int(date_part[:4])
-        doy  = int(date_part[5:8])
-        base_date = datetime(year, 1, 1) + timedelta(days=doy - 1)
-        h, m, s = time_part.split(":")
-        sec_f = float(s)
-        usec  = round((sec_f % 1) * 1_000_000)
-        return datetime(
-            base_date.year, base_date.month, base_date.day,
-            int(h), int(m), int(sec_f), usec,
-        )
-
-    # Calendar: Python 3.11+ fromisoformat handles any precision.
-    return datetime.fromisoformat(e)
-
-
-def _format_epoch(dt: datetime) -> str:
-    """Format a stdlib datetime to CCSDS calendar epoch string."""
-    s = dt.strftime("%Y-%m-%dT%H:%M:%S")
-    if dt.microsecond:
-        s += f".{dt.microsecond:06d}".rstrip("0")
-    return s
 
 
 # ---------------------------------------------------------------------------
@@ -102,10 +59,10 @@ _COV_POSITIONS: list[tuple[int, int]] = [
 # ---------------------------------------------------------------------------
 
 class PurePythonBackend:
-    """
-    Compute backend using Python stdlib only.
+    """Compute backend using Python stdlib only.
 
-    Satisfies EphemerisBackend and CovarianceBackend protocols structurally.
+    Satisfies ``EphemerisBackend`` and ``CovarianceBackend`` protocols.
+    Requires no optional dependencies.
     """
 
     # ------------------------------------------------------------------
@@ -116,28 +73,65 @@ class PurePythonBackend:
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> list[float]:
-        """Return [x, y, z] in km."""
+        """Return the position vector as a plain list.
+
+        Direction: domain → external.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            ``[x, y, z]`` in km.
+        """
         return [line.x, line.y, line.z]
 
     def velocity(
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> list[float]:
-        """Return [x_dot, y_dot, z_dot] in km/s."""
+        """Return the velocity vector as a plain list.
+
+        Direction: domain → external.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            ``[x_dot, y_dot, z_dot]`` in km/s.
+        """
         return [line.x_dot, line.y_dot, line.z_dot]
 
     def acceleration(
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> list[float] | None:
-        """Return [x_ddot, y_ddot, z_ddot] in km/s² or None if absent."""
-        if line.x_ddot is None:
+        """Return the acceleration vector as a plain list, or ``None`` if absent.
+
+        Direction: domain → external.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            ``[x_ddot, y_ddot, z_ddot]`` in km/s², or ``None`` when any
+            component is missing.
+        """
+        if line.x_ddot is None or line.y_ddot is None or line.z_ddot is None:
             return None
-        return [line.x_ddot, line.y_ddot, line.z_ddot]  # type: ignore[list-item]
+        return [line.x_ddot, line.y_ddot, line.z_ddot]
 
     def parse_epoch(self, epoch: str) -> datetime:
-        """Parse a CCSDS §7.5.10 epoch string to a stdlib datetime."""
-        return _parse_epoch(epoch)
+        """Parse a CCSDS §7.5.10 epoch string to a stdlib ``datetime``.
+
+        Direction: external string → stdlib datetime.
+
+        Args:
+            epoch: A CCSDS-format epoch string.
+
+        Returns:
+            A timezone-naive ``datetime`` in UTC.
+        """
+        return parse_ccsds_epoch(epoch)
 
     # ------------------------------------------------------------------
     # EphemerisBackend — domain → external
@@ -147,11 +141,19 @@ class PurePythonBackend:
         self,
         data: OEM.Segment.EphemerisData,
     ) -> list[list[float]]:
-        """
-        Return a (N, 6) or (N, 9) nested list of floats.
+        """Convert ``EphemerisData`` to a nested list of floats.
 
-        Each row is [x, y, z, x_dot, y_dot, z_dot] or, when every data line
-        carries accelerations, [x, y, z, x_dot, y_dot, z_dot, x_ddot, y_ddot, z_ddot].
+        Direction: domain → external.
+
+        Each row is ``[x, y, z, x_dot, y_dot, z_dot]`` or, when every data
+        line carries accelerations,
+        ``[x, y, z, x_dot, y_dot, z_dot, x_ddot, y_ddot, z_ddot]``.
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+
+        Returns:
+            An (N, 6) or (N, 9) nested list of Python floats.
         """
         result: list[list[float]] = []
         for line in data.ephemeris_data_lines:
@@ -159,8 +161,8 @@ class PurePythonBackend:
                 line.x, line.y, line.z,
                 line.x_dot, line.y_dot, line.z_dot,
             ]
-            if line.x_ddot is not None:
-                row += [line.x_ddot, line.y_ddot, line.z_ddot]  # type: ignore[list-item]
+            if line.x_ddot is not None and line.y_ddot is not None and line.z_ddot is not None:
+                row += [line.x_ddot, line.y_ddot, line.z_ddot]
             result.append(row)
         return result
 
@@ -168,6 +170,20 @@ class PurePythonBackend:
         self,
         data: OEM.Segment.EphemerisData,
     ) -> Any:
+        """Raise ``NotImplementedError``; trajectory construction requires a numerical library.
+
+        Direction: domain → external (not implemented).
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+
+        Raises:
+            NotImplementedError: Always.  Install the ``ostk`` extra
+                (``pip install orbit-data-messages[ostk]``) and use
+                ``OSTkBackend``, or the ``numpy`` extra
+                (``pip install orbit-data-messages[numpy]``) and use
+                ``NumpyBackend``.
+        """
         raise NotImplementedError(
             "trajectory_from_ephemeris requires a numerical library. "
             "Install the 'ostk' extra and use OSTkBackend, or the 'numpy' "
@@ -183,6 +199,19 @@ class PurePythonBackend:
         data: OEM.Segment.EphemerisData,
         epoch: Any,
     ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
+        """Raise ``NotImplementedError``; interpolation requires a numerical library.
+
+        Direction: domain + external epoch → domain (not implemented).
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+            epoch: The target epoch.
+
+        Raises:
+            NotImplementedError: Always.  Install the ``numpy`` extra
+                (``pip install orbit-data-messages[numpy]``) and use
+                ``NumpyBackend``.
+        """
         raise NotImplementedError(
             "interpolate requires a numerical library. "
             "Install the 'numpy' extra and use NumpyBackend."
@@ -194,10 +223,21 @@ class PurePythonBackend:
         stop: Any,
         step: float,
     ) -> list[datetime]:
-        """
-        Generate epoch values from start to stop (inclusive) at step seconds.
+        """Generate epoch values from ``start`` to ``stop`` at ``step`` seconds.
 
-        start and stop must be datetime objects as returned by parse_epoch.
+        ``start`` and ``stop`` must be ``datetime`` objects as returned by
+        ``parse_epoch``.
+
+        Args:
+            start: Start epoch as a ``datetime``.
+            stop: Stop epoch as a ``datetime`` (inclusive).
+            step: Step size in seconds.
+
+        Returns:
+            A list of ``datetime`` values covering the interval.
+
+        Raises:
+            TypeError: If ``start`` or ``stop`` are not ``datetime`` instances.
         """
         if not isinstance(start, datetime) or not isinstance(stop, datetime):
             raise TypeError(
@@ -221,9 +261,23 @@ class PurePythonBackend:
         arr: list[list[float]],
         epochs: list[str],
     ) -> OEM.Segment.EphemerisData:
-        """
-        Construct a validated EphemerisData from a (N, 6|9) nested list and
-        CCSDS epoch strings.  Pydantic validation fires on construction.
+        """Construct a validated ``EphemerisData`` from a nested list and epoch strings.
+
+        Direction: external → domain.
+
+        Args:
+            arr: An (N, 6) or (N, 9) nested list.  Columns are
+                ``[x, y, z, x_dot, y_dot, z_dot]`` with optional acceleration
+                appended.
+            epochs: A list of N CCSDS §7.5.10 epoch strings.
+
+        Returns:
+            A fully validated ``EphemerisData`` instance.  Pydantic validation
+            fires on construction.
+
+        Raises:
+            ValueError: If ``len(arr) != len(epochs)`` or any row does not
+                have exactly 6 or 9 elements.
         """
         from orbit_data_messages.models.oem import OEM as _OEM  # lazy import
 
@@ -260,6 +314,18 @@ class PurePythonBackend:
         self,
         trajectory: Any,
     ) -> OEM.Segment.EphemerisData:
+        """Raise ``NotImplementedError``; trajectory conversion requires an external library.
+
+        Direction: external → domain (not implemented).
+
+        Args:
+            trajectory: A trajectory object from an external library.
+
+        Raises:
+            NotImplementedError: Always.  Install the ``ostk`` extra
+                (``pip install orbit-data-messages[ostk]``) and use
+                ``OSTkBackend``.
+        """
         raise NotImplementedError(
             "ephemeris_data_from_trajectory requires a trajectory object from "
             "an external library. Install the 'ostk' extra and use OSTkBackend."
@@ -270,6 +336,19 @@ class PurePythonBackend:
         state: Any,
         epoch: str,
     ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
+        """Raise ``NotImplementedError``; state conversion requires an external library.
+
+        Direction: external → domain (not implemented).
+
+        Args:
+            state: A state object from an external library.
+            epoch: A CCSDS §7.5.10 epoch string.
+
+        Raises:
+            NotImplementedError: Always.  Install the ``numpy`` extra
+                (``pip install orbit-data-messages[numpy]``) or the ``ostk``
+                extra (``pip install orbit-data-messages[ostk]``).
+        """
         raise NotImplementedError(
             "state_to_line requires a state object from an external library. "
             "Install the 'numpy' or 'ostk' extra."
@@ -283,11 +362,18 @@ class PurePythonBackend:
         self,
         cov: OEM.Segment.CovarianceMatrix,
     ) -> list[list[list[float]]]:
-        """
-        Return a (N, 6, 6) nested list of floats.
+        """Convert a ``CovarianceMatrix`` to a nested list of floats.
 
-        The symmetric 6×6 matrix is reconstructed from the 21 LTM elements
-        stored in each CovarianceMatrixLines entry.
+        Direction: domain → external.
+
+        Reconstruct the symmetric 6×6 matrix from the 21 lower-triangular
+        elements stored in each ``CovarianceMatrixLines`` entry.
+
+        Args:
+            cov: A validated ``CovarianceMatrix`` instance.
+
+        Returns:
+            An (N, 6, 6) nested list of Python floats.
         """
         result: list[list[list[float]]] = []
         for cml in cov.covariance_matrix_lines:
@@ -309,12 +395,24 @@ class PurePythonBackend:
         epochs: list[str],
         cov_ref_frame: str | None = None,
     ) -> OEM.Segment.CovarianceMatrix:
-        """
-        Construct a validated CovarianceMatrix from a (N, 6, 6) nested list,
-        CCSDS epoch strings, and an optional reference frame.
-        Pydantic validation fires on construction.
+        """Construct a validated ``CovarianceMatrix`` from a nested list and epoch strings.
+
+        Direction: external → domain.
 
         Only the lower-triangular elements are read from each 6×6 matrix.
+
+        Args:
+            arr: An (N, 6, 6) nested list of floats.
+            epochs: A list of N CCSDS §7.5.10 epoch strings.
+            cov_ref_frame: Optional reference frame string.  When ``None``, no
+                ``COV_REF_FRAME`` keyword is set on the resulting lines.
+
+        Returns:
+            A fully validated ``CovarianceMatrix`` instance.  Pydantic
+            validation fires on construction.
+
+        Raises:
+            ValueError: If ``len(arr) != len(epochs)``.
         """
         from orbit_data_messages.models.oem import OEM as _OEM  # lazy import
 

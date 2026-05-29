@@ -1,28 +1,30 @@
 """
-Open Space Toolkit (OSTk) compute backend.
+Open Space Toolkit (OSTk) compute backend for the ``orbit_data_messages`` package.
 
-Implements EphemerisBackend and CovarianceBackend using OSTk types.
+Satisfies ``EphemerisBackend`` and ``CovarianceBackend`` protocols.
+Requires the ``ostk`` extra.
 
 The OSTk import is guarded at module top: importing this module raises
-ImportError with install instructions if the 'ostk' extra is not installed.
+``ImportError`` with install instructions if the ``ostk`` extra is not
+installed.
 
-Unit conversions
-----------------
-OEM uses km and km/s; OSTk uses metres and m/s internally.  All conversion
-factors live in the named constants below and nowhere else.
+Unit conversions:
+    OEM uses km and km/s; OSTk uses metres and m/s internally.  All conversion
+    factors live in the named constants below and nowhere else.
 
-Fully implemented
------------------
-position, velocity, acceleration, parse_epoch, to_array,
-trajectory_from_ephemeris, ephemeris_data_from_trajectory,
-steps, state_to_line, covariance_to_array, covariance_from_array.
+Fully implemented:
+    position, velocity, acceleration, parse_epoch, to_array,
+    trajectory_from_ephemeris, ephemeris_data_from_trajectory,
+    steps, state_to_line, covariance_to_array, covariance_from_array.
 
-Raises NotImplementedError
---------------------------
-interpolate  (use OSTk's own propagator instead).
+Raises NotImplementedError:
+    interpolate  (use OSTk's own propagator instead).
 """
 from __future__ import annotations
 
+import re
+from datetime import datetime
+from datetime import timedelta
 from typing import Any
 from typing import TYPE_CHECKING
 
@@ -50,7 +52,12 @@ if TYPE_CHECKING:
     from orbit_data_messages.models.oem import OEM
 
 # ---------------------------------------------------------------------------
-# Unit conversion constants — ALL km ↔ m conversions live here and nowhere else
+# Unit conversion constants.
+#
+# OEM (CCSDS 502.0-B-3) stores positions in km and velocities in km/s.
+# OSTk uses SI units internally: metres for position, m/s for velocity.
+# All km ↔ m conversions in this module use only these four constants so
+# that the conversion factor is never duplicated or hardcoded elsewhere.
 # ---------------------------------------------------------------------------
 
 _KM_TO_M    = 1_000.0   # OEM position: km → OSTk: m
@@ -63,6 +70,17 @@ _MS_TO_KMS  = 1e-3       # OSTk velocity: m/s → OEM: km/s
 # ---------------------------------------------------------------------------
 
 def _build_cov_layout() -> tuple[list[str], list[tuple[int, int]]]:
+    """Build the covariance lower-triangular-matrix field list and position map.
+
+    Derives field names from ``CovarianceMatrixLines.model_fields`` at import
+    time so the layout stays in sync with the domain model automatically.
+
+    Returns:
+        A tuple ``(field_names, positions)`` where ``field_names`` is the
+        ordered list of the 21 LTM field names and ``positions`` is the
+        corresponding list of ``(row, col)`` 0-indexed positions in a 6×6
+        lower-triangular matrix.
+    """
     from orbit_data_messages.models.oem import OEM as _OEM
     _CML = _OEM.Segment.CovarianceMatrix.CovarianceMatrixLines
     fields = [fn for fn in _CML.model_fields if fn not in ("epoch", "cov_ref_frame")]
@@ -84,52 +102,64 @@ _COV_FIELDS, _COV_POSITIONS = _build_cov_layout()
 # ---------------------------------------------------------------------------
 
 def _epoch_to_instant(epoch: str) -> Instant:
-    """
-    Convert a CCSDS §7.5.10 epoch string to an OSTk Instant in UTC.
+    """Convert a CCSDS epoch string to an OSTk ``Instant`` in UTC.
 
-    Both calendar (YYYY-MM-DDThh:mm:ss) and day-of-year (YYYY-DOYThh:mm:ss)
-    formats are accepted.
-    """
-    import re as _re
-    e = epoch.rstrip("Z")
+    Handles both calendar-date (``YYYY-MM-DDTHH:MM:SS``) and day-of-year
+    (``YYYY-DDDTHH:MM:SS``) formats as required by §7.5.10.  A trailing
+    ``Z`` is stripped before parsing.
 
-    # Day-of-year → calendar
-    if _re.match(r"^\d{4}-(\d{3})T", e):
-        from datetime import datetime, timedelta
-        date_part, time_part = e.split("T", 1)
+    Args:
+        epoch: A CCSDS §7.5.10 epoch string.
+
+    Returns:
+        An OSTk ``Instant`` in the UTC scale.
+    """
+    # §7.5.10 — strip trailing Z, convert DOY format to calendar if needed.
+    normalized = epoch.rstrip("Z")
+
+    if re.match(r"^\d{4}-(\d{3})T", normalized):
+        date_part, time_part = normalized.split("T", 1)
         year = int(date_part[:4])
         doy  = int(date_part[5:8])
         base = datetime(year, 1, 1) + timedelta(days=doy - 1)
-        e = f"{base.year:04d}-{base.month:02d}-{base.day:02d}T{time_part}"
+        normalized = f"{base.year:04d}-{base.month:02d}-{base.day:02d}T{time_part}"
 
-    # Parse components
-    date_str, time_str = e.split("T")
-    y, mo, d = (int(x) for x in date_str.split("-"))
+    date_str, time_str = normalized.split("T")
+    year, month, day = (int(x) for x in date_str.split("-"))
     parts = time_str.split(":")
-    h, mi = int(parts[0]), int(parts[1])
-    s_full = float(parts[2])
-    s_int  = int(s_full)
-    us     = round((s_full % 1) * 1_000_000)
-    ms_int = us // 1_000
-    us_rem = us % 1_000
+    hour, minute = int(parts[0]), int(parts[1])
+    total_seconds = float(parts[2])
+    whole_seconds = int(total_seconds)
+    microseconds  = round((total_seconds % 1) * 1_000_000)
+    milliseconds  = microseconds // 1_000
+    sub_milliseconds = microseconds % 1_000
 
-    dt = DateTime(y, mo, d, h, mi, s_int, ms_int, us_rem, 0)
+    dt = DateTime(year, month, day, hour, minute, whole_seconds, milliseconds, sub_milliseconds, 0)
     return Instant.date_time(dt, Scale.UTC)
 
 
 def _instant_to_epoch(instant: Instant) -> str:
-    """
-    Convert an OSTk Instant to a CCSDS calendar epoch string (UTC).
+    """Convert an OSTk ``Instant`` to a CCSDS calendar epoch string in UTC.
+
+    Trailing zeros in the fractional-seconds part are stripped so that
+    whole-second epochs are formatted without a decimal point.
+
+    Args:
+        instant: An OSTk ``Instant``.
+
+    Returns:
+        A CCSDS-format calendar epoch string (``YYYY-MM-DDTHH:MM:SS[.f]``)
+        without a trailing ``Z``.
     """
     dt: DateTime = instant.get_date_time(Scale.UTC)
-    # DateTime has attributes: year, month, day, hour, minute, second,
+    # DateTime attributes: year, month, day, hour, minute, second,
     # millisecond, microsecond (OSTk convention).
-    us = dt.millisecond * 1_000 + dt.microsecond
-    s  = f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}T"
-    s += f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
-    if us:
-        s += f".{us:06d}".rstrip("0")
-    return s
+    total_microseconds = dt.millisecond * 1_000 + dt.microsecond
+    result  = f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}T"
+    result += f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+    if total_microseconds:
+        result += f".{total_microseconds:06d}".rstrip("0")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -137,13 +167,14 @@ def _instant_to_epoch(instant: Instant) -> str:
 # ---------------------------------------------------------------------------
 
 class OSTkBackend:
-    """
-    Compute backend using Open Space Toolkit.
+    """Compute backend using Open Space Toolkit.
 
-    Satisfies EphemerisBackend and CovarianceBackend protocols structurally.
+    Satisfies ``EphemerisBackend`` and ``CovarianceBackend`` protocols.
+    Requires the ``ostk`` extra.
 
     The GCRF (Geocentric Celestial Reference Frame) is used as the default
-    inertial frame when constructing OSTk Position and Velocity objects.
+    inertial frame when constructing OSTk ``Position`` and ``Velocity``
+    objects.  Override ``frame`` on the instance to use a different frame.
     """
 
     # Reference frame used when building OSTk state objects from OEM data.
@@ -161,10 +192,17 @@ class OSTkBackend:
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> Position:
-        """
-        Return an OSTk Position in the GCRF frame.
+        """Return an OSTk ``Position`` in the GCRF frame.
 
-        Unit conversion: OEM km × _KM_TO_M → OSTk m.
+        Direction: domain → external.
+
+        Unit conversion: OEM km × ``_KM_TO_M`` → OSTk m.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            An OSTk ``Position`` object in metres, expressed in the GCRF frame.
         """
         coords = RealVector([
             line.x * _KM_TO_M,
@@ -177,10 +215,17 @@ class OSTkBackend:
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> Velocity:
-        """
-        Return an OSTk Velocity in the GCRF frame.
+        """Return an OSTk ``Velocity`` in the GCRF frame.
 
-        Unit conversion: OEM km/s × _KMS_TO_MS → OSTk m/s.
+        Direction: domain → external.
+
+        Unit conversion: OEM km/s × ``_KMS_TO_MS`` → OSTk m/s.
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            An OSTk ``Velocity`` object in m/s, expressed in the GCRF frame.
         """
         coords = RealVector([
             line.x_dot * _KMS_TO_MS,
@@ -193,10 +238,18 @@ class OSTkBackend:
         self,
         line: OEM.Segment.EphemerisData.EphemerisDataLine,
     ) -> RealVector | None:
-        """
-        Return a RealVector of acceleration components in m/s², or None.
+        """Return acceleration components as an OSTk ``RealVector``, or ``None``.
 
-        Unit conversion: OEM km/s² × _KMS_TO_MS → OSTk m/s².
+        Direction: domain → external.
+
+        Unit conversion: OEM km/s² × ``_KMS_TO_MS`` → OSTk m/s².
+
+        Args:
+            line: A validated ``EphemerisDataLine``.
+
+        Returns:
+            An OSTk ``RealVector`` of acceleration components in m/s², or
+            ``None`` when the line carries no acceleration.
         """
         if line.x_ddot is None:
             return None
@@ -207,7 +260,16 @@ class OSTkBackend:
         ])
 
     def parse_epoch(self, epoch: str) -> Instant:
-        """Parse a CCSDS §7.5.10 epoch string to an OSTk Instant (UTC)."""
+        """Parse a CCSDS §7.5.10 epoch string to an OSTk ``Instant`` (UTC).
+
+        Direction: external string → OSTk epoch type.
+
+        Args:
+            epoch: A CCSDS-format epoch string.
+
+        Returns:
+            An OSTk ``Instant`` in the UTC scale.
+        """
         return _epoch_to_instant(epoch)
 
     # ------------------------------------------------------------------
@@ -215,11 +277,19 @@ class OSTkBackend:
     # ------------------------------------------------------------------
 
     def to_array(self, data: OEM.Segment.EphemerisData) -> list[list[float]]:
-        """
-        Return a (N, 6) or (N, 9) nested list of floats in OEM units (km, km/s).
+        """Convert ``EphemerisData`` to a nested list of floats in OEM units.
 
-        Values are left in OEM units — no conversion applied here.
-        Use trajectory_from_ephemeris to get an OSTk-native representation.
+        Direction: domain → external.
+
+        Values are left in OEM units (km, km/s) — no unit conversion is
+        applied.  Use ``trajectory_from_ephemeris`` to get an OSTk-native
+        representation with SI units.
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+
+        Returns:
+            An (N, 6) or (N, 9) nested list of Python floats.
         """
         result: list[list[float]] = []
         for line in data.ephemeris_data_lines:
@@ -236,12 +306,19 @@ class OSTkBackend:
         self,
         data: OEM.Segment.EphemerisData,
     ) -> Trajectory:
-        """
-        Build an OSTk Trajectory from EphemerisData.
+        """Build an OSTk ``Trajectory`` from ``EphemerisData``.
 
-        Unit conversion: OEM km → OSTk m (×_KM_TO_M);
-                         OEM km/s → OSTk m/s (×_KMS_TO_MS).
-        All conversions use the named constants above.
+        Direction: domain → external.
+
+        Unit conversion: OEM km → OSTk m (× ``_KM_TO_M``);
+        OEM km/s → OSTk m/s (× ``_KMS_TO_MS``).  All conversions use the
+        named constants defined at module level.
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+
+        Returns:
+            An OSTk ``Trajectory`` constructed from one ``State`` per data line.
         """
         states: list[State] = []
         for line in data.ephemeris_data_lines:
@@ -260,6 +337,19 @@ class OSTkBackend:
         data: OEM.Segment.EphemerisData,
         epoch: Any,
     ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
+        """Raise ``NotImplementedError``; use OSTk's own trajectory interpolation.
+
+        Direction: domain + external epoch → domain (not implemented).
+
+        Args:
+            data: A validated ``EphemerisData`` instance.
+            epoch: The target epoch.
+
+        Raises:
+            NotImplementedError: Always.  Call ``trajectory_from_ephemeris``
+                to obtain an OSTk ``Trajectory``, then use the trajectory's
+                own state-at-instant method.
+        """
         raise NotImplementedError(
             "Use trajectory_from_ephemeris to get an OSTk Trajectory, "
             "then use the OSTk Trajectory's own state-at-instant method."
@@ -271,8 +361,15 @@ class OSTkBackend:
         stop: Instant,
         step: float,
     ) -> list[Instant]:
-        """
-        Generate OSTk Instant values from start to stop at step seconds.
+        """Generate OSTk ``Instant`` values from ``start`` to ``stop``.
+
+        Args:
+            start: Start epoch as an OSTk ``Instant``.
+            stop: Stop epoch as an OSTk ``Instant`` (inclusive).
+            step: Step size in seconds.
+
+        Returns:
+            A list of OSTk ``Instant`` values covering the interval.
         """
         from ostk.physics.time import Duration
         result: list[Instant] = []
@@ -292,7 +389,20 @@ class OSTkBackend:
         arr: list[list[float]],
         epochs: list[str],
     ) -> OEM.Segment.EphemerisData:
-        """Construct EphemerisData from a (N, 6|9) nested list and epoch strings."""
+        """Construct a validated ``EphemerisData`` from a nested list and epoch strings.
+
+        Direction: external → domain.
+
+        Delegates to ``PurePythonBackend`` for the actual construction.
+
+        Args:
+            arr: An (N, 6) or (N, 9) nested list of floats.
+            epochs: A list of N CCSDS §7.5.10 epoch strings.
+
+        Returns:
+            A fully validated ``EphemerisData`` instance.  Pydantic validation
+            fires on construction.
+        """
         from orbit_data_messages.compute.backends.pure import PurePythonBackend
         return PurePythonBackend().ephemeris_data_from_array(arr, epochs)
 
@@ -300,13 +410,21 @@ class OSTkBackend:
         self,
         trajectory: Trajectory,
     ) -> OEM.Segment.EphemerisData:
-        """
-        Convert an OSTk Trajectory to a validated EphemerisData.
+        """Convert an OSTk ``Trajectory`` to a validated ``EphemerisData``.
 
-        Unit conversion: OSTk m → OEM km (×_M_TO_KM);
-                         OSTk m/s → OEM km/s (×_MS_TO_KMS).
-        The OSTk Instant for each state is converted to a CCSDS epoch string
-        before being stored in the domain model.
+        Direction: external → domain.
+
+        Unit conversion: OSTk m → OEM km (× ``_M_TO_KM``);
+        OSTk m/s → OEM km/s (× ``_MS_TO_KMS``).  The OSTk ``Instant`` for
+        each state is converted to a CCSDS epoch string before being stored
+        in the domain model.
+
+        Args:
+            trajectory: An OSTk ``Trajectory`` instance.
+
+        Returns:
+            A fully validated ``EphemerisData`` instance.  Pydantic validation
+            fires on construction.
         """
         from orbit_data_messages.models.oem import OEM as _OEM
 
@@ -335,11 +453,20 @@ class OSTkBackend:
         state: State,
         epoch: str,
     ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
-        """
-        Convert an OSTk State and a CCSDS epoch string to an EphemerisDataLine.
+        """Convert an OSTk ``State`` and a CCSDS epoch string to a data line.
 
-        Unit conversion: OSTk m → OEM km (×_M_TO_KM);
-                         OSTk m/s → OEM km/s (×_MS_TO_KMS).
+        Direction: external → domain.
+
+        Unit conversion: OSTk m → OEM km (× ``_M_TO_KM``);
+        OSTk m/s → OEM km/s (× ``_MS_TO_KMS``).
+
+        Args:
+            state: An OSTk ``State`` object.
+            epoch: A CCSDS §7.5.10 epoch string.
+
+        Returns:
+            A fully validated ``EphemerisDataLine``.  Pydantic validation fires
+            on construction.
         """
         from orbit_data_messages.models.oem import OEM as _OEM
 
@@ -363,7 +490,18 @@ class OSTkBackend:
         self,
         cov: OEM.Segment.CovarianceMatrix,
     ) -> list[list[list[float]]]:
-        """Return a (N, 6, 6) nested list (no unit conversion applied)."""
+        """Convert a ``CovarianceMatrix`` to a nested list of floats.
+
+        Direction: domain → external.
+
+        No unit conversion is applied.  Delegates to ``PurePythonBackend``.
+
+        Args:
+            cov: A validated ``CovarianceMatrix`` instance.
+
+        Returns:
+            An (N, 6, 6) nested list of Python floats.
+        """
         from orbit_data_messages.compute.backends.pure import PurePythonBackend
         return PurePythonBackend().covariance_to_array(cov)
 
@@ -377,6 +515,20 @@ class OSTkBackend:
         epochs: list[str],
         cov_ref_frame: str | None = None,
     ) -> OEM.Segment.CovarianceMatrix:
-        """Construct a validated CovarianceMatrix from a (N, 6, 6) nested list."""
+        """Construct a validated ``CovarianceMatrix`` from a nested list and epoch strings.
+
+        Direction: external → domain.
+
+        Delegates to ``PurePythonBackend`` for the actual construction.
+
+        Args:
+            arr: An (N, 6, 6) nested list of floats.
+            epochs: A list of N CCSDS §7.5.10 epoch strings.
+            cov_ref_frame: Optional reference frame string.
+
+        Returns:
+            A fully validated ``CovarianceMatrix`` instance.  Pydantic
+            validation fires on construction.
+        """
         from orbit_data_messages.compute.backends.pure import PurePythonBackend
         return PurePythonBackend().covariance_from_array(arr, epochs, cov_ref_frame)

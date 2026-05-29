@@ -26,6 +26,8 @@ from orbit_data_messages.io.kvn._utils import emit_kvs
 from orbit_data_messages.io.kvn._utils import field_keyword
 from orbit_data_messages.io.kvn._utils import format_value
 from orbit_data_messages.io.kvn._utils import get_delineation
+from orbit_data_messages.io.options import WriterOptions
+from orbit_data_messages.models.metadata import FieldMetadata
 from orbit_data_messages.models.oem import OEM
 
 # ---------------------------------------------------------------------------
@@ -47,87 +49,162 @@ _COV_REF_KW  = field_keyword(_CML, "cov_ref_frame")
 # Row lengths for the 6×6 lower triangular matrix (§5.2.5.4).
 _LTM_ROW_LENGTHS = (1, 2, 3, 4, 5, 6)
 
+# Format spec for covariance values — read from the first covariance field's
+# FieldMetadata.format_spec; all 21 elements share the same spec.  The spec
+# includes the space flag (" .15e") so " ".join(...) yields sign-column layout.
+_COV_SPEC = next(
+    (m.format_spec for m in _CML.model_fields[_COV_FIELD_ORDER[0]].metadata
+     if isinstance(m, FieldMetadata)),
+    None,
+)
 
-def _emit_ephemeris_line(
+# CCSDS keyword for the first covariance field — used to look up float_formats
+# overrides at runtime (all covariance elements use the same spec).
+_COV_FIRST_KW = field_keyword(_CML, _COV_FIELD_ORDER[0])
+
+# Per-field format specs for EphemerisDataLine — read from FieldMetadata.
+_EDL = OEM.Segment.EphemerisData.EphemerisDataLine
+_EDL_SPECS: dict[str, str | None] = {
+    fn: next((m.format_spec for m in fi.metadata if isinstance(m, FieldMetadata)), None)
+    for fn, fi in _EDL.model_fields.items()
+}
+
+# CCSDS keywords for EphemerisDataLine fields — used for float_formats lookups.
+_EDL_KEYWORDS: dict[str, str | None] = {
+    fn: next((m.keyword for m in fi.metadata if isinstance(m, FieldMetadata)), None)
+    for fn, fi in _EDL.model_fields.items()
+}
+
+# Column width for covariance KV pair alignment (EPOCH=5, COV_REF_FRAME=13).
+_COV_KW_WIDTH = max(len(_EPOCH_KW), len(_COV_REF_KW))
+
+
+def _format_ephemeris_parts(
     line: OEM.Segment.EphemerisData.EphemerisDataLine,
-    out: TextIO,
-) -> None:
+    options: WriterOptions | None,
+) -> list[str]:
+    """Return formatted string parts for one ephemeris data line (§5.2.4.1).
+
+    Separating formatting from writing enables the two-pass column-alignment
+    path: collect all rows' parts first, compute per-column max width, then write.
     """
-    §5.2.4.1 — fixed-order: epoch x y z x_dot y_dot z_dot [x_ddot y_ddot z_ddot].
-    §7.7.2.1 — units are km/km/s/km/s**2 but NOT displayed on data lines.
-    """
+    def _fmt(field_name: str, value: float) -> str:
+        spec = _EDL_SPECS.get(field_name)
+        if options and options.float_formats:
+            kw = _EDL_KEYWORDS.get(field_name)
+            if kw and kw in options.float_formats:
+                spec = options.float_formats[kw]
+        return format_value(value, spec)
+
     parts = [
         line.epoch,
-        format_value(line.x), format_value(line.y), format_value(line.z),
-        format_value(line.x_dot), format_value(line.y_dot), format_value(line.z_dot),
+        _fmt("x", line.x), _fmt("y", line.y), _fmt("z", line.z),
+        _fmt("x_dot", line.x_dot), _fmt("y_dot", line.y_dot), _fmt("z_dot", line.z_dot),
     ]
     if line.x_ddot is not None:
         # §5.2.4.2 — accelerations are all-or-nothing.
         parts += [
-            format_value(line.x_ddot),
-            format_value(line.y_ddot),
-            format_value(line.z_ddot),
+            _fmt("x_ddot", line.x_ddot),
+            _fmt("y_ddot", line.y_ddot),
+            _fmt("z_ddot", line.z_ddot),
         ]
-    out.write(" ".join(parts) + "\n")
+    return parts
+
+
+def _emit_ephemeris_line(
+    line: OEM.Segment.EphemerisData.EphemerisDataLine,
+    out: TextIO,
+    *,
+    options: WriterOptions | None = None,
+) -> None:
+    # §5.2.4.1 — see _format_ephemeris_parts for formatting; this path writes
+    # immediately without column alignment (used when align_keywords=False).
+    out.write(" ".join(_format_ephemeris_parts(line, options)) + "\n")
 
 
 def _emit_covariance_matrix_lines(
     cml: OEM.Segment.CovarianceMatrix.CovarianceMatrixLines,
     out: TextIO,
+    *,
+    options: WriterOptions | None = None,
 ) -> None:
-    """
-    §5.2.5.3 — EPOCH and COV_REF_FRAME as KV pairs.
-    §5.2.5.4 — 21 LTM elements written row by row (1/2/3/4/5/6 per row).
-    """
-    out.write(f"{_EPOCH_KW} = {cml.epoch}\n")
+    # §5.2.5.3 — EPOCH and COV_REF_FRAME as KV pairs.
+    # §5.2.5.4 — 21 LTM elements written row by row (1/2/3/4/5/6 per row).
+    align = options is not None and options.align_keywords
+    ew = _COV_KW_WIDTH if align else 0  # keyword pad width
+
+    epoch_kw = f"{_EPOCH_KW:{ew}}" if align else _EPOCH_KW
+    out.write(f"{epoch_kw} = {cml.epoch}\n")
     if cml.cov_ref_frame is not None:
-        out.write(f"{_COV_REF_KW} = {format_value(cml.cov_ref_frame)}\n")
+        ref_kw = f"{_COV_REF_KW:{ew}}" if align else _COV_REF_KW
+        out.write(f"{ref_kw} = {format_value(cml.cov_ref_frame)}\n")
 
     # §5.2.5.4 — lower triangular matrix, upper-left to lower-right.
+    # The format_spec (" .15e") includes the space flag so " ".join(...) yields
+    # sign-column alignment: positive values get a leading space, negative get "-",
+    # matching the pattern in spec Annex G figure G-13.
+    cov_spec = _COV_SPEC
+    if options and options.float_formats and _COV_FIRST_KW in options.float_formats:
+        cov_spec = options.float_formats[_COV_FIRST_KW]
+
     values = [getattr(cml, fn) for fn in _COV_FIELD_ORDER]
     idx = 0
     for row_len in _LTM_ROW_LENGTHS:
         row = values[idx: idx + row_len]
-        out.write(" ".join(format_value(v) for v in row) + "\n")
+        if cov_spec is not None:
+            out.write(" ".join(format(v, cov_spec) for v in row) + "\n")
+        else:
+            out.write(" ".join(format_value(v) for v in row) + "\n")
         idx += row_len
 
 
-def _emit_segment(segment: OEM.Segment, out: TextIO) -> None:
-    """
-    Write one OEM segment: META block + ephemeris data + optional COVARIANCE block.
-
-    §5.2.3.3 — META_START and META_STOP delimit each metadata block.
-    §7.8.9   — comments allowed at the beginning of the ephemeris data section
-               and at the beginning of the covariance data section.
-    §5.2.5.2 — COVARIANCE_START and COVARIANCE_STOP delimit covariance data.
-    """
-    # Metadata block — delimiters come from Delineation on OEM.Segment.Metadata.
-    emit_block(segment.metadata, out)
+def _emit_segment(segment: OEM.Segment, out: TextIO, *, options: WriterOptions | None = None) -> None:
+    """Write one OEM segment: META block + ephemeris data + optional COVARIANCE block."""
+    # §5.2.3.3 — Metadata block delimited by META_START/META_STOP.
+    emit_block(segment.metadata, out, options=options)
     out.write("\n")
 
-    # Ephemeris section: optional leading comments (§7.8.9), then data lines.
-    ed = segment.ephemeris_data
-    if ed.comment:
-        for c in ed.comment:
-            out.write(f"COMMENT {c}\n")
-    for line in ed.ephemeris_data_lines:
-        _emit_ephemeris_line(line, out)
+    # §7.8.9 — optional leading comments, then ephemeris data lines.
+    ephemeris_data = segment.ephemeris_data
+    if ephemeris_data.comment:
+        for text in ephemeris_data.comment:
+            out.write(f"COMMENT {text}\n")
+        out.write("\n")  # blank line separating comments from first data line
+
+    if options is not None and options.align_data_columns:
+        # Two-pass column alignment (§5.2.4.3 — "at least one space" between items).
+        # Pass 1: format all rows, compute max width per column position.
+        all_parts = [
+            _format_ephemeris_parts(line, options)
+            for line in ephemeris_data.ephemeris_data_lines
+        ]
+        col_widths = [
+            max(len(row[i]) for row in all_parts)
+            for i in range(len(all_parts[0]))
+        ]
+        # Pass 2: write each row with right-justified fixed-width columns.
+        for parts in all_parts:
+            out.write(" ".join(f"{p:>{w}}" for p, w in zip(parts, col_widths)) + "\n")
+    else:
+        for line in ephemeris_data.ephemeris_data_lines:
+            _emit_ephemeris_line(line, out, options=options)
     out.write("\n")
 
-    # Optional covariance block (§5.2.5.2).
+    # §5.2.5.2 — optional covariance block delimited by COVARIANCE_START/STOP.
     if segment.covariance_matrix is not None:
-        cm = segment.covariance_matrix
-        # Delineation on OEM.Segment.CovarianceMatrix provides the keywords.
-        d = get_delineation(type(cm))
-        if d:
-            out.write(f"{d.start}\n")
-        if cm.comment:
-            for c in cm.comment:
-                out.write(f"COMMENT {c}\n")
-        for cml in cm.covariance_matrix_lines:
-            _emit_covariance_matrix_lines(cml, out)
-        if d:
-            out.write(f"{d.stop}\n")
+        covariance = segment.covariance_matrix
+        delineation = get_delineation(type(covariance))
+        if delineation:
+            out.write(f"{delineation.start}\n")
+        if covariance.comment:
+            for text in covariance.comment:
+                out.write(f"COMMENT {text}\n")
+        for i, cml in enumerate(covariance.covariance_matrix_lines):
+            if i > 0:
+                out.write("\n")  # blank line between consecutive matrices
+            _emit_covariance_matrix_lines(cml, out, options=options)
+        if delineation:
+            out.write(f"{delineation.stop}\n")
         out.write("\n")
 
 
@@ -138,15 +215,22 @@ class KVNOEMWriter:
     Satisfies MessageWriterPort structurally.
     """
 
-    def write(self, message: OEM, path: Path) -> None:
+    def write(self, message: OEM, path: Path, *, options: WriterOptions | None = None) -> None:
+        """Serializes a validated OEM domain model to a KVN file at path.
+
+        Args:
+            message: Validated OEM instance to serialize.
+            path: Destination file. Created or overwritten.
+            options: Formatting options. When omitted, WriterOptions() defaults apply.
+        """
         with path.open("w", encoding="utf-8") as out:
             # Header (table 5-2).
-            emit_block(message.header, out)
+            emit_block(message.header, out, options=options)
             out.write("\n")
 
             # One or more segments (§5.2.1.2: header + [META + data + optional COV]+).
             for segment in message.segments:
-                _emit_segment(segment, out)
+                _emit_segment(segment, out, options=options)
 
 
 OrbitEphemerisMessageKVNWriter = KVNOEMWriter

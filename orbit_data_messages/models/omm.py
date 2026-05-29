@@ -14,7 +14,7 @@ from .values import TimeSystem
 from .values import ManCovRefFrame
 
  
-_CCSDS_DATE_RE = re.compile(
+_CCSDS_DATE_RE: re.Pattern[str] = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?"
     r"|\d{4}-\d{3}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?"
 )
@@ -76,8 +76,14 @@ class OMM(CCSDSDataMessage, BaseModel):
     """
 
     class Header(BaseModel):
+        """OMM header block (CCSDS 502.0-B-3 table 4-1).
+
+        Contains the message version, optional comments and classification,
+        creation date, originator, and optional message ID.
+        """
+
         ccsds_omm_vers: Annotated[
-            str, 
+            str,
             Field(
                 description=(
                     "Format version in the form of 'x.y', where "
@@ -94,9 +100,8 @@ class OMM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "Comments (allowed in the OPM Header "
-                    "only immediately after the OPM version number). "
-                    "See 7.8 for formatting rules."
+                    "Comments allowed at the beginning of this block "
+                    "per §7.8.9. See 7.8 for formatting rules."
                 ),
             ),
             FieldMetadata(keyword="COMMENT"),
@@ -165,7 +170,7 @@ class OMM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
@@ -175,15 +180,20 @@ class OMM(CCSDSDataMessage, BaseModel):
             return _validate_ccsds_date(v, "creation_date")
 
     class Metadata(BaseModel):
+        """OMM metadata block (CCSDS 502.0-B-3 table 4-2).
+
+        Describes the object, reference frame, time system, and mean element theory.
+        Delimited by META_START / META_STOP in KVN format.
+        """
+
         # 7.8 Formatting rules
         comment: Annotated[
             list[str] | None,
             Field(
                 default=None,
                 description=(
-                    "Comments (allowed in the OPM Header "
-                    "only immediately after the OPM version number). "
-                    "See 7.8 for formatting rules."
+                    "Comments allowed at the beginning of this block "
+                    "per §7.8.9. See 7.8 for formatting rules."
                 ),
             ),
             FieldMetadata(keyword="COMMENT"),
@@ -277,21 +287,12 @@ class OMM(CCSDSDataMessage, BaseModel):
         @field_validator("comment")
         @classmethod
         def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-            if v is not None and len(v) == 0:
+            if v is not None and not v:
                 raise ValueError("comment must be None or a non-empty list of strings.")
             return v
 
         # The spec explicitly says "there is no CCSDS-based restriction on the value
-        # for this keyword" and calls the YYYY-NNNP{PP} format a recommendation
-        #
-        # @field_validator("object_id")
-        # @classmethod
-        # def validate_object_id(cls, v: str) -> str:
-        #     if v != "UNKNOWN" and not re.fullmatch(r"\d{4}-\d{3}[A-Z]+", v):
-        #         raise ValueError(
-        #             "object_id must be 'UNKNOWN' or match YYYY-NNNP{PP}, e.g. '2000-052A'"
-        #         )
-        #     return v
+        # for this keyword" and calls the YYYY-NNNP{PP} format a recommendation.
 
         @field_validator("ref_frame_epoch")
         @classmethod
@@ -343,6 +344,11 @@ class OMM(CCSDSDataMessage, BaseModel):
             return self
 
     class Data(BaseModel):
+        """OMM data section (CCSDS 502.0-B-3 §4.3).
+
+        Contains the mean Keplerian elements plus optional spacecraft parameters,
+        TLE-related parameters, covariance matrix, and user-defined parameters.
+        """
 
         class MeanKeplerianElements(BaseModel):
             """
@@ -357,9 +363,8 @@ class OMM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
-                        "See 7.8 for formatting rules."
+                        "Comments allowed at the beginning of this block "
+                        "per §7.8.9. See 7.8 for formatting rules."
                     ),
                 ),
                 FieldMetadata(keyword="COMMENT"),
@@ -474,14 +479,14 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="GM",
-                    units="km**3/s**2",
+                    units="km**3/s**2", format_spec=" .1e",
                 ),
             ] = None
 
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
  
@@ -511,9 +516,8 @@ class OMM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
-                        "See 7.8 for formatting rules."
+                        "Comments allowed at the beginning of this block "
+                        "per §7.8.9. See 7.8 for formatting rules."
                     ),
                 ),
                 FieldMetadata(keyword="COMMENT"),
@@ -588,7 +592,7 @@ class OMM(CCSDSDataMessage, BaseModel):
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
@@ -609,9 +613,8 @@ class OMM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
-                        "See 7.8 for formatting rules."
+                        "Comments allowed at the beginning of this block "
+                        "per §7.8.9. See 7.8 for formatting rules."
                     ),
                 ),
                 FieldMetadata(keyword="COMMENT"),
@@ -689,7 +692,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="BSTAR",
-                    units="1/[Earth radii]",
+                    units="1/[Earth radii]", format_spec=" .1e",
                 ),
             ] = None
  
@@ -705,7 +708,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="BTERM",
-                    units="m**2/kg",
+                    units="m**2/kg", format_spec=" .1e",
                 ),
             ] = None
  
@@ -721,7 +724,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="MEAN_MOTION_DOT",
-                    units="rev/day**2",
+                    units="rev/day**2", format_spec=" .1e",
                 ),
             ] = None
  
@@ -738,7 +741,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="MEAN_MOTION_DDOT",
-                    units="rev/day**3",
+                    units="rev/day**3", format_spec=" .1e",
                 ),
             ] = None
  
@@ -754,14 +757,14 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="AGOM",
-                    units="m**2/kg",
+                    units="m**2/kg", format_spec=" .1e",
                 ),
             ] = None
 
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
  
@@ -800,9 +803,8 @@ class OMM(CCSDSDataMessage, BaseModel):
                 Field(
                     default=None,
                     description=(
-                        "Comments (allowed in the OPM Header "
-                        "only immediately after the OPM version number). "
-                        "See 7.8 for formatting rules."
+                        "Comments allowed at the beginning of this block "
+                        "per §7.8.9. See 7.8 for formatting rules."
                     ),
                 ),
                 FieldMetadata(keyword="COMMENT"),
@@ -830,7 +832,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_X",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -844,7 +846,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_X",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -857,7 +859,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_Y",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -871,7 +873,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_X",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -884,7 +886,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_Y", 
-                    units="km**2"
+                    units="km**2", format_spec=" .15e"
                 ),
             ]
 
@@ -897,7 +899,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_Z",
-                    units="km**2",
+                    units="km**2", format_spec=" .15e",
                 ),
             ]
 
@@ -911,7 +913,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_X",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -924,7 +926,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_Y",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -937,7 +939,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_Z",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -950,7 +952,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CX_DOT_X_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -964,7 +966,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_X",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -977,7 +979,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_Y",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -990,7 +992,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_Z",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -1003,7 +1005,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_X_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -1016,7 +1018,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CY_DOT_Y_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -1030,7 +1032,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_X",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -1043,7 +1045,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Y",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -1056,7 +1058,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Z",
-                    units="km**2/s",
+                    units="km**2/s", format_spec=" .15e",
                 ),
             ]
 
@@ -1069,7 +1071,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_X_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
             cz_dot_y_dot: Annotated[
@@ -1081,7 +1083,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Y_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
@@ -1094,46 +1096,21 @@ class OMM(CCSDSDataMessage, BaseModel):
                 ),
                 FieldMetadata(
                     keyword="CZ_DOT_Z_DOT",
-                    units="km**2/s**2",
+                    units="km**2/s**2", format_spec=" .15e",
                 ),
             ]
 
             @field_validator("comment")
             @classmethod
             def validate_comment_not_empty(cls, v: list[str] | None) -> list[str] | None:
-                if v is not None and len(v) == 0:
+                if v is not None and not v:
                     raise ValueError("comment must be None or a non-empty list of strings.")
                 return v
 
             # The spec imposes no validity constraint beyond numeric format.
             # A zero variance (e.g., cx_x = 0.0) is expressible in double precision
-            # and passes all stated spec requirements, yet this check rejects it.
-            # The check adds a mathematical constraint that the spec does not mandate.
-            #
-            # @model_validator(mode="after")
-            # def check_covariance_positive_definite_proxy(self) -> "OEM.Data.CovarianceMatrixLines":
-            #     """
-            #     Proxy check for positive-definiteness: verifies all diagonal (variance)
-            #     elements are strictly positive. Necessary but not sufficient for a valid
-            #     covariance matrix. A full Cholesky-based check would be sufficient but
-            #     requires numpy or similar to be computationally efficient.
-            #     """
-            #     diagonal = [
-            #         ("CX_X", self.cx_x),
-            #         ("CY_Y", self.cy_y),
-            #         ("CZ_Z", self.cz_z),
-            #         ("CX_DOT_X_DOT", self.cx_dot_x_dot),
-            #         ("CY_DOT_Y_DOT", self.cy_dot_y_dot),
-            #         ("CZ_DOT_Z_DOT", self.cz_dot_z_dot),
-            #     ]
-            #     non_positive = [kw for kw, v in diagonal if v <= 0]
-            #     if non_positive:
-            #         raise ValueError(
-            #             f"Covariance diagonal elements must be strictly positive "
-            #             f"(variance cannot be zero or negative). "
-            #             f"Failing elements: {', '.join(non_positive)}"
-            #         )
-            #     return self
+            # and passes all stated spec requirements. A positive-definiteness check
+            # would add a mathematical constraint the spec does not mandate.
 
         class UserDefinedParameters(BaseModel):
             """
@@ -1274,11 +1251,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 raise ValueError("mean_motion_dot is required when mean_element_theory='SGP'")
             if tle.mean_motion_ddot is None:
                 raise ValueError("mean_motion_ddot is required when mean_element_theory='SGP'")
-        if theory == "PPT3":
-            if tle.mean_motion_dot is None:
-                raise ValueError("mean_motion_dot is required when mean_element_theory='PPT3'")
-            if tle.mean_motion_ddot is None:
-                raise ValueError("mean_motion_ddot is required when mean_element_theory='PPT3'")
+        # PPT3 is handled by check_ppt3_params, which also covers the tle-is-None case.
         return self
 
     @model_validator(mode="after")

@@ -175,6 +175,15 @@ class KVNOEMReader:
     """
 
     def read(self, path: Path) -> OEM:
+        """Reads a KVN OEM file and returns a validated OEM domain model.
+
+        Args:
+            path: Path to the KVN OEM file.
+
+        Returns:
+            A fully validated OEM domain model. Pydantic ValidationError is
+            never swallowed — it propagates to the caller unchanged.
+        """
         text = path.read_text()
         raw = parse_kvn(text)
         sections = split_blocks(raw)
