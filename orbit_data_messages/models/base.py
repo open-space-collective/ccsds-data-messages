@@ -1,5 +1,9 @@
 """Abstract base class for all CCSDS Data Message types."""
+from __future__ import annotations
+
 from abc import ABC
+from typing import Any
+from typing import Self
 
 
 class CCSDSDataMessage(ABC):
@@ -23,7 +27,20 @@ class CCSDSDataMessage(ABC):
         TypeError: If instantiated directly (i.e. ``CCSDSDataMessage()``).
     """
 
-    def __new__(cls, *args, **kwargs):
+    def __new__(cls: type[Self], *args: Any, **kwargs: Any) -> Self:
+        """Create a new instance, blocking direct instantiation of the abstract base.
+
+        Args:
+            cls (type[Self]): The class being instantiated.
+            *args (Any): Positional arguments forwarded to ``super().__new__``.
+            **kwargs (Any): Keyword arguments forwarded to ``super().__new__``.
+
+        Returns:
+            Self: A new instance of the concrete subclass.
+
+        Raises:
+            TypeError: If ``cls`` is ``CCSDSDataMessage`` itself.
+        """
         if cls is CCSDSDataMessage:
             raise TypeError(
                 "CCSDSDataMessage cannot be instantiated directly. "
