@@ -29,7 +29,6 @@ class WriterOptions:
     Section 8.10.18 allows them to be omitted. Default ``True`` follows section 8.13.6 and
     the example tables (8-2, 8-4, 8-6, 8-7) in the spec. Set ``False`` for minimal XML
     output without unit annotations.
-    Set ``False`` for minimal XML output without unit annotations.
     """
 
     # Only relevant for KVN output.
