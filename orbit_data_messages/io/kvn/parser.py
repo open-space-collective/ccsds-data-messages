@@ -193,13 +193,13 @@ def parse_kvn(text: str) -> dict[str, Any]:
                 current_block['kvs'][key] = value          # Last value wins.
                 current_block['ordered_items'].append(('kv', key, value))
             elif not header_done:
-                header_kvs[key]: str = value                    # Last value wins.
+                header_kvs[key] = value                    # Last value wins.
                 header_ordered_items.append(('kv', key, value))
             else:
                 # KV pair between named blocks: store in the pending ``KV`` dict
                 # so adapters can read them as typed fields (OPM state vector,
                 # OMM mean elements, etc.).
-                pending_kvs[key]: str = value
+                pending_kvs[key] = value
             continue
 
         if kind == 'data':
