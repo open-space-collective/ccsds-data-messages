@@ -10,6 +10,7 @@ from typing import TextIO
 
 from orbit_data_messages.io._utils import build_keyword_map
 from orbit_data_messages.io._utils import format_value
+from orbit_data_messages.io._utils import map_kvs
 from orbit_data_messages.models.metadata import Delineation
 from orbit_data_messages.models.metadata import FieldMetadata
 
@@ -25,6 +26,7 @@ __all__ = [
     "get_delineation",
     "block_delimiter_name",
     "field_keyword",
+    "block_start_keyword",
     "dispatch_flat_kvs",
     "emit_kvs",
     "emit_block",
@@ -100,6 +102,34 @@ def field_keyword(
     raise ValueError(
         f"{model_class.__qualname__}.{field_name} has no FieldMetadata(keyword=...). "
         f"Every field used as a structural key must carry a keyword annotation."
+    )
+
+
+def block_start_keyword(model_class: type[BaseModel]) -> str:
+    """
+    Return the KVN keyword for the field marked ``block_start=True`` on a model class.
+
+    Adapters call this instead of ``field_keyword(cls, "field_name")`` so that
+    the choice of which field begins a repeating block is declared in the model,
+    not in the reader/writer.
+
+    Args:
+        model_class (type[BaseModel]): Pydantic model class to inspect.
+
+    Returns:
+        str: The CCSDS keyword string for the block-start field.
+
+    Raises:
+        ValueError: If no field on ``model_class`` carries
+            ``FieldMetadata(block_start=True)``.
+    """
+    for field_info in model_class.model_fields.values():
+        for item in field_info.metadata:
+            if isinstance(item, FieldMetadata) and item.block_start:
+                return item.keyword
+    raise ValueError(
+        f"{model_class.__qualname__} has no field with FieldMetadata(block_start=True). "
+        f"Mark the field that signals the start of a new repeating block."
     )
 
 
