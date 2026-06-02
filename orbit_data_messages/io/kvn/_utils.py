@@ -202,23 +202,23 @@ def dispatch_flat_kvs(
             current_man_kvs: dict[str, str] = {}
             current_man_comments = list(pending)
             pending.clear()
-            current_man_kvs[key]: str = value
+            current_man_kvs[key] = value
 
         elif current_man_kvs is not None and key in man_kw_map:
             # Continuation of the current maneuver group.
             current_man_comments.extend(pending)
             pending.clear()
-            current_man_kvs[key]: str = value
+            current_man_kvs[key] = value
 
         elif user_kvs is not None and key.startswith("USER_DEFINED_"):
             pending.clear()
-            user_kvs[key]: str = value
+            user_kvs[key] = value
 
         elif key in kw_to_block:
             kvs_dict, comments_list = kw_to_block[key]
             comments_list.extend(pending)
             pending.clear()
-            kvs_dict[key]: str = value
+            kvs_dict[key] = value
 
     # Seal the last maneuver group.
     if current_man_kvs:
