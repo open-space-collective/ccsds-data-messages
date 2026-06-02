@@ -4,7 +4,7 @@ OPM KVN is completely flat: no ``*_START``/``*_STOP`` block delimiters of any ki
 annotations on the domain model; nothing is hardcoded.
 Keyword order follows the spec tables (section 3.2.2 table 3-1, section 3.2.3 table 3-2, section 3.2.4 table 3-3).  ``pydantic`` preserves field declaration order in ``model_fields``, which matches the spec table order.
 
-Optional fields are omitted when ``None`` (section 6.2.1.4 equivalent for OPM: optional KVN assignments may be omitted).
+Optional fields are omitted when ``None`` (covered by general KVN rules, section 7.4).
 
 Spec references: section 3.2 (OPM structure), section 7.3-7.4 (KVN rules), section 7.8.7 (comments).
 """
