@@ -1,3 +1,4 @@
+# Copyright © Loft Orbital Solutions Inc.
 """
 Format-agnostic helpers for mapping between ``FieldMetadata`` annotations on domain models
 and the keyword / element names that appear in serialized files. Both KVN and XML adapters
@@ -37,7 +38,7 @@ def build_keyword_map(model_class: type[BaseModel]) -> dict[str, str]:
     for field_name, field_info in model_class.model_fields.items():
         for item in field_info.metadata:
             if isinstance(item, FieldMetadata):
-                result[item.keyword]: str = field_name
+                result[item.keyword] = field_name
     return result
 
 
@@ -79,7 +80,7 @@ def map_kvs(
         if field_name is None:
             continue  # Unknown keyword: forward-compatible skip.
 
-        kwargs[field_name]: Any = value
+        kwargs[field_name] = value
 
     # Inject comments when the model has a ``comment`` field.
     comment_field: str | None = keyword_map.get('COMMENT')
