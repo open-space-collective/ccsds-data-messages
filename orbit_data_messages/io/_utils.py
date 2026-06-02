@@ -1,4 +1,3 @@
-# Copyright © Loft Orbital Solutions Inc.
 """
 Format-agnostic helpers for mapping between ``FieldMetadata`` annotations on domain models
 and the keyword / element names that appear in serialized files. Both KVN and XML adapters
