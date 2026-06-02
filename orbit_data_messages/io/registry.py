@@ -41,137 +41,83 @@ _WRITERS: dict[tuple[str, str], str | type] = {
 }
 
 
-# Internal loader: resolves a string reference or class to a fresh adapter instance.
-def _load(reference: str | type) -> MessageReaderPort | MessageWriterPort:
-    """
-    Resolve a reference and return a fresh adapter instance.
-
-    Accepts either a ``"module.path:ClassName"`` string (built-in adapters,
-    lazily imported) or a direct class object (user-registered adapters).
-
-    Args:
-        reference (str | type): The ``"module.path:ClassName"`` string or the adapter class itself.
-
-    Returns:
-        MessageReaderPort | MessageWriterPort: A freshly instantiated adapter object.
-    """
+def _load(reference: str | type) -> object:
     if isinstance(reference, type):
         return reference()
     module_path, class_name = reference.rsplit(":", 1)
     module = importlib.import_module(module_path)
-    cls = getattr(module, class_name)
-    return cls()
+    return getattr(module, class_name)()
 
 
-def get_reader(
-    fmt: str,
-    msg_type: str,
-) -> MessageReaderPort:
+def get_reader(fmt: str, msg_type: str) -> MessageReaderPort:
     """
-    Return an instantiated reader adapter for the given format and message type.
-
-    Args:
-        fmt (str): The file format, either ``'kvn'`` or ``'xml'``.
-        msg_type (str): The CCSDS message type: ``'oem'``, ``'omm'``, ``'opm'``, or ``'ocm'``.
-
-    Returns:
-        MessageReaderPort: A freshly instantiated reader adapter.
+    Return an instantiated reader adapter for the given ``format`` and ``message_type``.
 
     Raises:
-        ValueError: If the (fmt, msg_type) pair is not registered. The error
-            message lists all currently registered combinations.
+        ValueError: If the ``(fmt, msg_type)`` pair is not registered.
     """
-    key: tuple[str, str] = (fmt, msg_type)
-    reference: str | type | None = _READERS.get(key)
+    reference = _READERS.get((fmt, msg_type))
     if reference is None:
-        available: str = ", ".join(f"({f!r}, {t!r})" for f, t in sorted(_READERS))
+        available = ", ".join(f"({f!r}, {t!r})" for f, t in sorted(_READERS))
         raise ValueError(
             f"No reader registered for format={fmt!r}, message_type={msg_type!r}. "
             f"Available: {available}"
         )
-    adapter: MessageReaderPort | MessageWriterPort = _load(reference)
-    if not isinstance(adapter, MessageReaderPort):
+    return _load(reference)  # type: ignore[return-value]
+
+
+def get_writer(fmt: str, msg_type: str) -> MessageWriterPort:
+    """
+    Return an instantiated writer adapter for the given ``format`` and ``message_type``.
+
+    Raises:
+        ValueError: If the ``(fmt, msg_type)`` pair is not registered.
+    """
+    reference = _WRITERS.get((fmt, msg_type))
+    if reference is None:
+        available = ", ".join(f"({f!r}, {t!r})" for f, t in sorted(_WRITERS))
         raise ValueError(
-            f"Registered reader adapter for format={fmt!r}, message_type={msg_type!r} "
-            f"is not a MessageReaderPort: {type(adapter)}"
+            f"No writer registered for format={fmt!r}, message_type={msg_type!r}. "
+            f"Available: {available}"
         )
-    return adapter
+    return _load(reference)  # type: ignore[return-value]
 
 
 def register_reader(
     fmt: str, 
-    msg_type: str,
-    cls: type,
+    msg_type: str, 
+    cls: type[MessageReaderPort],
 ) -> None:
     """
     Register a custom reader adapter for a ``(format, message_type)`` pair.
 
     Allows third-party code to extend the registry without modifying built-in
-    tables. Overwrites any existing entry for the same key, including built-in
-    adapters.
+    tables. Overwrites any existing entry for the same key.
 
     Args:
         fmt (str): The file format string (e.g. ``'kvn'``, ``'xml'``, or a custom name).
         msg_type (str): The message type string (e.g. ``'oem'``, or a custom type).
-        cls (type): The adapter class satisfying ``MessageReaderPort``. Must be a class,
-            not an instance; it will be instantiated fresh on each call to
-            ``get_reader()``.
+        cls (type[MessageReaderPort]): The adapter class satisfying ``MessageReaderPort``. Must be a class,
+            not an instance; it will be instantiated fresh on each call to ``get_reader()``.
     """
     _READERS[(fmt, msg_type)] = cls
 
 
 def register_writer(
-    fmt: str,
-    msg_type: str,
-    cls: type,
+    fmt: str, 
+    msg_type: str, 
+    cls: type[MessageWriterPort],
 ) -> None:
     """
     Register a custom writer adapter for a ``(format, message_type)`` pair.
 
     Allows third-party code to extend the registry without modifying built-in
-    tables.  Overwrites any existing entry for the same key, including built-in
-    adapters.
+    tables. Overwrites any existing entry for the same key.
 
     Args:
         fmt (str): The file format string (e.g. ``'kvn'``, ``'xml'``, or a custom name).
         msg_type (str): The message type string (e.g. ``'oem'``, or a custom type).
-        cls (type): The adapter class satisfying ``MessageWriterPort``. Must be a class,
-            not an instance; it will be instantiated fresh on each call to
-            ``get_writer()``.
+        cls (type[MessageWriterPort]): The adapter class satisfying ``MessageWriterPort``. Must be a class,
+            not an instance; it will be instantiated fresh on each call to ``get_writer()``.
     """
     _WRITERS[(fmt, msg_type)] = cls
-
-
-def get_writer(
-    fmt: str,
-    msg_type: str
-) -> MessageWriterPort:
-    """
-    Return an instantiated writer adapter for the given format and message type.
-
-    Args:
-        fmt (str): The file format, either ``'kvn'`` or ``'xml'``.
-        msg_type (str): The CCSDS message type: ``'oem'``, ``'omm'``, ``'opm'``, or ``'ocm'``.
-
-    Returns:
-        MessageWriterPort: A freshly instantiated writer adapter.
-
-    Raises:
-        ValueError: If the ``(fmt, msg_type)`` pair is not registered. The error
-            message lists all currently registered combinations.
-    """
-    key: tuple[str, str] = (fmt, msg_type)
-    reference: str | type | None = _WRITERS.get(key)
-    if reference is None:
-        available: str = ", ".join(f"({f!r}, {t!r})" for f, t in sorted(_WRITERS))
-        raise ValueError(
-            f"No writer registered for format={fmt!r}, message_type={msg_type!r}. "
-            f"Available: {available}"
-        )
-    adapter: MessageReaderPort | MessageWriterPort = _load(reference)
-    if not isinstance(adapter, MessageWriterPort):
-        raise ValueError(
-            f"Registered writer adapter for format={fmt!r}, message_type={msg_type!r} "
-            f"is not a MessageWriterPort: {type(adapter)}"
-        )
-    return adapter
