@@ -37,18 +37,13 @@ def _classify(line: str) -> tuple[str, str | None, str | None]:
 
     Returns:
         tuple[str, str | None, str | None]: A ``(kind, key, value)`` triple.
-        ``kind`` is one of: ``'blank'`` (section 7.3.5), ``'percent'`` (ignored
-        metadata), ``'comment'`` (section 7.8.5), ``'start'`` (``*_START`` opener,
+        ``kind`` is one of: ``'blank'`` (section 7.3.5), ``'comment'`` (section 7.8.5), ``'start'`` (``*_START`` opener,
         section 7.4.2), ``'stop'`` (``*_STOP`` closer, section 7.4.2), ``'kv'`` (``KEY =
         VALUE``, section 7.4.1), or ``'data'`` (raw ephemeris/covariance/maneuver row).
         ``key`` and ``value`` are ``None`` for kinds that do not carry them.
     """
     if not line:
         return ("blank", None, None)
-
-    # Section 7.3.5: lines beginning with '%' carry no assignable meaning.
-    if line.startswith('%'):
-        return ("percent", None, None)
 
     # Section 7.8.5: COMMENT keyword (exception to KVN; no '=' sign).
     match: re.Match[str] | None = _COMMENT_RE.match(line)
@@ -142,8 +137,8 @@ def parse_kvn(text: str) -> dict[str, Any]:
     for raw_line in text.splitlines():
         kind, key, value = _classify(raw_line.strip())
 
-        if kind in ("blank", "percent"):
-            # Section 7.3.5: blank lines ignored; '%' lines carry no meaning.
+        if kind == "blank":
+            # Section 7.3.5: blank lines have no assignable meaning.
             continue
 
         if kind == "comment":
