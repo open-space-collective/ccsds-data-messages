@@ -23,7 +23,6 @@ from orbit_data_messages.models.metadata import FieldMetadata
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
-    from xml.etree.ElementTree import Element
     from orbit_data_messages.io.options import WriterOptions
 
 # Structural XML element names with no corresponding model class (section 8.5–8.7).
@@ -34,26 +33,60 @@ _TAG_SEGMENT: str = "segment" # OPM/OMM/OCM have no Segment model (OEM.Segment u
 _TAG_DATA: str = "data"       # OCM and OEM have no Data model wrapping the section.
 
 
-def get_xml_tag(model_class: type) -> str | None:
+def get_xml_tag(model_class: type) -> str:
     """
     Return the XML structural element tag declared on ``model_class`` via ``_xml_tag``.
 
     Analogous to ``get_delineation()`` in the KVN adapter: model classes carry
     ``_xml_tag: ClassVar[str]`` so adapters derive the element name from the model
-    rather than hardcoding it. Returns ``None`` if the class has no ``_xml_tag``.
+    rather than hardcoding it.
 
     Args:
         model_class (type): The model class to inspect.
 
     Returns:
-        str | None: The ``_xml_tag`` value, or ``None`` if not declared.
+        str: The ``_xml_tag`` value.
+
+    Raises:
+        AttributeError: If the class has no ``_xml_tag`` class variable.
     """
     tag: str | None = getattr(model_class, "_xml_tag", None)
-    return tag if isinstance(tag, str) else None
+    if not isinstance(tag, str):
+        raise AttributeError(
+            f"{model_class.__qualname__} has no '_xml_tag' class variable. "
+            "Add '_xml_tag: ClassVar[str] = \"...\"' to the class body."
+        )
+    return tag
+
+
+def get_xml_line_tag(model_class: type) -> str:
+    """
+    Return the XML data-line element tag declared on ``model_class`` via ``_xml_line_tag``.
+
+    Analogous to ``get_xml_tag()``, but for the sub-element that holds individual
+    raw data lines within an OCM block (e.g. ``<trajLine>``, ``<covLine>``,
+    ``<manLine>`` per section 8.11.15).
+
+    Args:
+        model_class (type): The model class to inspect.
+
+    Returns:
+        str: The ``_xml_line_tag`` value.
+
+    Raises:
+        AttributeError: If the class has no ``_xml_line_tag`` class variable.
+    """
+    tag: str | None = getattr(model_class, "_xml_line_tag", None)
+    if not isinstance(tag, str):
+        raise AttributeError(
+            f"{model_class.__qualname__} has no '_xml_line_tag' class variable. "
+            "Add '_xml_line_tag: ClassVar[str] = \"...\"' to the class body."
+        )
+    return tag
 
 
 def read_model(
-    element: Element,
+    element: ET.Element,
     model_class: type[BaseModel],
     *,
     extra_kvs: dict[str, str] | None = None,
@@ -67,7 +100,7 @@ def read_model(
     on elements are ignored on read: Pydantic validates numerical values (section 8.13.6).
 
     Args:
-        element (Element): The XML ``Element`` whose direct children carry keyword values.
+        element (ET.Element): The XML ``Element`` whose direct children carry keyword values.
         model_class (type[BaseModel]): The target Pydantic model class.
         extra_kvs (dict[str, str] | None): Additional key-value pairs merged in
             before building kwargs: used to inject the root-level ``version``
@@ -76,7 +109,7 @@ def read_model(
     Returns:
         dict[str, Any]: Constructor kwargs ready for ``model_class(**kwargs)``.
     """
-    kw_map: dict[str, str] = build_keyword_map(model_class)
+    keyword_map: dict[str, str] = build_keyword_map(model_class)
     kvs: dict[str, str] = {}
     comments: list[str] = []
 
@@ -88,7 +121,7 @@ def read_model(
             comments.append(text)
         elif tag.startswith("USER_DEFINED_"):
             kvs[tag] = text
-        elif tag in kw_map:
+        elif tag in keyword_map:
             kvs[tag] = text
 
     if extra_kvs:
@@ -99,7 +132,7 @@ def read_model(
 
 def write_model(
     model: BaseModel,
-    parent: Element,
+    parent: ET.Element,
     *,
     skip_fields: frozenset[str] = frozenset(),
     options: "WriterOptions | None" = None,
@@ -116,18 +149,15 @@ def write_model(
 
     Args:
         model (BaseModel): The Pydantic model instance to serialize.
-        parent (Element): The XML ``Element`` under which keyword child elements are
+        parent (ET.Element): The XML ``Element`` under which keyword child elements are
             appended.
         skip_fields (frozenset[str]): The Python field names to omit, e.g.
             ``'ccsds_opm_vers'`` which maps to the XML root ``version``
             attribute rather than a child element. Defaults to empty frozenset.
         options (WriterOptions | None): The formatting options. Defaults to None,
             which applies ``WriterOptions()`` defaults.
-
-    Returns:
-        None
     """
-    kw_map_rev: dict[str, str] = {fn: kw for kw, fn in build_keyword_map(type(model)).items()}
+    keyword_map_rev: dict[str, str] = {field_name: keyword for keyword, field_name in build_keyword_map(type(model)).items()}
     include_units: bool = options is None or options.include_units
 
     for field_name in type(model).model_fields:
@@ -138,62 +168,71 @@ def write_model(
         if value is None:
             continue
 
-        kw: str | None = kw_map_rev.get(field_name)
+        keyword: str | None = keyword_map_rev.get(field_name)
 
-        if kw == "COMMENT":
+        if keyword == "COMMENT":
             # Section 8.13.7: each comment line is its own <COMMENT> element.
             for comment_text in value:
-                el: Element = ET.SubElement(parent, "COMMENT")
-                el.text: str = comment_text
+                element: ET.Element = ET.SubElement(parent, "COMMENT")
+                element.text: str = comment_text
 
-        elif kw is not None:
+        elif keyword is not None:
             field_info: FieldInfo = type(model).model_fields[field_name]
             # Resolve format spec: runtime override > model default.
             spec: str | None = next(
                 (m.format_spec for m in field_info.metadata if isinstance(m, FieldMetadata)),
                 None,
             )
-            if options and options.float_formats and kw in options.float_formats:
-                spec = options.float_formats[kw]
+            if options and options.float_formats and keyword in options.float_formats:
+                spec = options.float_formats[keyword]
 
-            el: Element = ET.SubElement(parent, kw)
+            element: ET.Element = ET.SubElement(parent, keyword)
             # Strip sign-column leading space: in XML each value is in its own
             # element so the sign flag's extra space is cosmetic noise.
-            el.text: str = format_value(value, spec).strip()
+            element.text: str = format_value(value, spec).strip()
 
             # Section 8.13.6: add units attribute when FieldMetadata carries units
             # and the caller has not opted out via options.include_units=False.
             if include_units:
-                for meta in field_info.metadata:
-                    if isinstance(meta, FieldMetadata) and meta.units:
-                        el.set("units", meta.units)
+                for metadata in field_info.metadata:
+                    if isinstance(metadata, FieldMetadata) and metadata.units:
+                        element.set("units", metadata.units)
                         break
 
         elif isinstance(value, dict):
             # USER_DEFINED_x pattern (section 6.2.11.1 / section 3.2.4.12 / section 4.2.4.10).
-            for key, val in value.items():
-                el: Element = ET.SubElement(parent, f"USER_DEFINED_{key}")
-                el.text: str = str(val)
+            for key, value in value.items():
+                element: ET.Element = ET.SubElement(parent, f"USER_DEFINED_{key}")
+                element.text: str = str(value)
+
+
+def serialize_xml(root: ET.Element) -> str:
+    """
+    Serialize an XML element tree to a UTF-8 string with an XML 1.0 declaration.
+
+    Equivalent to ``write_xml_file`` but returns the content as a string instead
+    of writing to disk, enabling in-memory round-trip workflows.
+
+    Args:
+        root (ET.Element): The root element of the document to serialize.
+
+    Returns:
+        str: The serialized XML content, including the XML declaration.
+    """
+    ET.indent(root, space="  ")
+    xml_body: str = ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_body
 
 
 def write_xml_file(
-    root: Element,
+    root: ET.Element,
     path: Path,
 ) -> None:
     """
     Serialize an XML element tree to a UTF-8 file with an XML 1.0 declaration.
 
-    Applies ``ET.indent`` for human-readable output, then prepends the XML 1.0
-    declaration with uppercase ``UTF-8``: matching the convention used across
-    all four ODM XML writers.
-
     Args:
         root (ET.Element): The root element of the document to serialize.
         path (Path): The destination file path; created or overwritten.
-
-    Returns:
-        None
     """
-    ET.indent(root, space="  ")
-    xml_body: str = ET.tostring(root, encoding="unicode")
-    path.write_text('<?xml version="1.0" encoding="UTF-8"?>\n' + xml_body, encoding="utf-8")
+    path.write_text(serialize_xml(root), encoding="utf-8")

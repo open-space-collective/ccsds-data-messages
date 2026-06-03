@@ -12,19 +12,34 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from xml.etree.ElementTree import Element
 
 
-def parse_xml_file(path: Path) -> Element:
+def parse_xml_file(path: Path) -> ET.Element:
     """
-    Parse an ODM/XML file and return the root Element.
+    Parse an ODM/XML file and return the root ``ET.Element``.
 
     Section 8.2: The XML declaration is the first line; ElementTree handles it.
     Namespace prefixes (from xmlns:xsi etc.) are stripped from tag names so
-    that callers can work with plain tag strings (e.g. 'opm', 'header').
+    that callers can work with plain tag strings (e.g. ``"opm"``, ``"header"``).
     """
     tree: ET.ElementTree = ET.parse(path)
     return tree.getroot()
+
+
+def parse_xml_string(content: str) -> ET.Element:
+    """
+    Parse an ODM/XML string and return the root ``ET.Element``.
+
+    Equivalent to ``parse_xml_file`` but operates on an in-memory string,
+    enabling round-trip workflows without touching the filesystem.
+
+    Args:
+        content (str): The XML content to parse.
+
+    Returns:
+        ET.Element: The root element of the parsed XML document.
+    """
+    return ET.fromstring(content)
 
 
 def strip_ns(tag: str) -> str:
@@ -38,20 +53,23 @@ def strip_ns(tag: str) -> str:
 
 
 def find_child(
-    parent: Element,
+    parent: ET.Element | None,
     tag: str,
-) -> Element | None:
+) -> ET.Element | None:
     """
     Return the first direct child of ``parent`` whose bare tag equals ``tag``,
-    ignoring any namespace prefix.
+    ignoring any namespace prefix. Returns ``None`` if ``parent`` is ``None``,
+    allowing safe chaining: ``find_child(find_child(root, "body"), "segment")``.
 
     Args:
-        parent (Element): The parent element to search.
+        parent (ET.Element | None): The parent element to search, or ``None``.
         tag (str): The tag to search for.
 
     Returns:
-        Element | None: The first child element with the given tag, or ``None`` if not found.
+        ET.Element | None: The first child element with the given tag, or ``None`` if not found.
     """
+    if parent is None:
+        return None
     for child in parent:
         if strip_ns(child.tag) == tag:
             return child
@@ -59,24 +77,27 @@ def find_child(
 
 
 def find_all(
-    parent: Element,
+    parent: ET.Element | None,
     tag: str,
-) -> list[Element]:
+) -> list[ET.Element]:
     """
     Return all direct children of ``parent`` whose bare tag equals ``tag``.
+    Returns an empty list if ``parent`` is ``None``.
 
     Args:
-        parent (Element): The parent element to search.
+        parent (ET.Element | None): The parent element to search, or ``None``.
         tag (str): The tag to search for.
 
     Returns:
-        list[Element]: All child elements with the given tag. Order is preserved.
+        list[ET.Element]: All child elements with the given tag. Order is preserved.
     """
+    if parent is None:
+        return []
     return [child for child in parent if strip_ns(child.tag) == tag]
 
 
 def get_text(
-    element: Element | None,
+    element: ET.Element | None,
     default: str = "",
 ) -> str:
     """
@@ -84,7 +105,7 @@ def get_text(
     when ``element`` is ``None`` or has no text.
 
     Args:
-        element (Element | None): The element to get the text from.
+        element (ET.Element | None): The element to get the text from.
         default (str): The default text to return if the element is ``None`` or has no text.
 
     Returns:
