@@ -49,12 +49,12 @@ def read(
 
     Args:
         source (str | Path): The file to read.
-        fmt (MessageFormat | str | None, optional): The format override —
+        fmt (MessageFormat | str | None, optional): The format override -
             ``MessageFormat.KVN`` or ``MessageFormat.XML`` (plain strings
             ``'kvn'``/``'xml'`` also accepted). Auto-detected when omitted.
             Defaults to None.
         message_type (MessageType | str | None, optional): The message type
-            override — ``MessageType.OEM``, ``MessageType.OPM``, etc. (plain
+            override - ``MessageType.OEM``, ``MessageType.OPM``, etc. (plain
             strings also accepted). Auto-detected when omitted. Defaults to None.
 
     Returns:
@@ -89,14 +89,14 @@ def read_string(
     """
     Parse a ``CCSDSDataMessage`` from an in-memory string.
 
-    Unlike ``read()``, format and message type are mandatory — there is no file
+    Unlike ``read()``, format and message type are mandatory - there is no file
     path to sniff them from.
 
     Args:
         content (str): The raw KVN or XML content to parse.
-        fmt (MessageFormat | str): The wire format — ``MessageFormat.KVN`` or
+        fmt (MessageFormat | str): The wire format - ``MessageFormat.KVN`` or
             ``MessageFormat.XML``.
-        message_type (MessageType | str): The message type — ``MessageType.OEM``,
+        message_type (MessageType | str): The message type - ``MessageType.OEM``,
             ``MessageType.OPM``, ``MessageType.OMM``, or ``MessageType.OCM``.
 
     Returns:
@@ -126,7 +126,7 @@ def read_oem(
 
     Args:
         source (str | Path): The file to read.
-        fmt (MessageFormat | str | None, optional): The format override —
+        fmt (MessageFormat | str | None, optional): The format override -
             ``MessageFormat.KVN`` or ``MessageFormat.XML`` (plain strings
             ``'kvn'``/``'xml'`` also accepted). Auto-detected when omitted.
             Defaults to None.
@@ -151,7 +151,7 @@ def read_opm(
 
     Args:
         source (str | Path): The file to read.
-        fmt (MessageFormat | str | None, optional): The format override —
+        fmt (MessageFormat | str | None, optional): The format override -
             ``MessageFormat.KVN`` or ``MessageFormat.XML`` (plain strings
             ``'kvn'``/``'xml'`` also accepted). Auto-detected when omitted.
             Defaults to None.
@@ -176,7 +176,7 @@ def read_omm(
 
     Args:
         source (str | Path): The file to read.
-        fmt (MessageFormat | str | None, optional): The format override —
+        fmt (MessageFormat | str | None, optional): The format override -
             ``MessageFormat.KVN`` or ``MessageFormat.XML`` (plain strings
             ``'kvn'``/``'xml'`` also accepted). Auto-detected when omitted.
             Defaults to None.
@@ -201,7 +201,7 @@ def read_ocm(
 
     Args:
         source (str | Path): The file to read.
-        fmt (MessageFormat | str | None, optional): The format override —
+        fmt (MessageFormat | str | None, optional): The format override -
             ``MessageFormat.KVN`` or ``MessageFormat.XML`` (plain strings
             ``'kvn'``/``'xml'`` also accepted). Auto-detected when omitted.
             Defaults to None.

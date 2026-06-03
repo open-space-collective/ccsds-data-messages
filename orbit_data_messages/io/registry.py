@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from orbit_data_messages.io.ports import MessageWriterPort
 
 # Registry tables: each value is a string reference to a reader or writer adapter class,
-# lazily imported on first request. Instantiated adapters are cached — adapters are
+# lazily imported on first request. Instantiated adapters are cached - adapters are
 # stateless singletons so a single instance per (fmt, msg_type) pair is sufficient.
 _READERS: dict[tuple[str, str], str | type] = {
     ("kvn", "oem"): "orbit_data_messages.io.kvn.oem_reader:KVNOEMReader",

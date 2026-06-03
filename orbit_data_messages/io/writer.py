@@ -100,7 +100,7 @@ def write_string(
 
     Args:
         message (CCSDSDataMessage): The validated domain model instance.
-        fmt (MessageFormat | str): The output format — ``MessageFormat.KVN`` or
+        fmt (MessageFormat | str): The output format - ``MessageFormat.KVN`` or
             ``MessageFormat.XML``.
         options (WriterOptions | None): The formatting options.
 

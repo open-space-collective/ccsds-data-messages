@@ -95,6 +95,6 @@ def detect_message_type(
     raise ValueError(
         f"Cannot determine the CCSDS message type for ``{path.name}``. "
         f"Rename the file with a standard extension (``.oem``, ``.omm``, ``.opm``, ``.ocm``, ``.xml``), "
-        f"include a standard ODM version keyword (§7.9.1), "
+        f"include a standard ODM version keyword (7.9.1), "
         f"or pass ``message_type=`` explicitly."
     )
