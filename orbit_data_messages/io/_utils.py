@@ -113,5 +113,7 @@ def format_value(
     if isinstance(value, Enum):
         return value.value  # StrEnum.value is the spec-defined string
     if isinstance(value, float):
-        return format(value, spec) if spec is not None else repr(value)
+        # Section 7.5.6-7.5.7: max 16 significant digits. ".15g" gives at most 15,
+        # using the shorter of fixed-point or scientific notation.
+        return format(value, spec) if spec is not None else format(value, ".15g")
     return str(value)
