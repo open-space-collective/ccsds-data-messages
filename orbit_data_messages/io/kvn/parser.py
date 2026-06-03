@@ -1,7 +1,5 @@
 """
-Low-level KVN tokenizer for CCSDS Data Messages.
-
-Implements the parsing rules of CCSDS 502.0-B-3 section 7.3-7.8. This module has no
+Implements the parsing rules of section 7.3-7.8. This module has no
 knowledge of specific message types or keyword semantics: it produces plain
 Python dicts only.  Adapters map the result to domain models.
 """
@@ -10,24 +8,24 @@ from typing import Any
 
 # Section 7.4.4: keywords are all-uppercase, may contain digits and underscores,
 # must not contain blanks.
-_KW = r'[A-Z][A-Z0-9_]*'
+_KW: str = r'[A-Z][A-Z0-9_]*'
 
 # Section 7.4.6: any white space immediately preceding or following the '=' sign is
 # not significant.  Trailing whitespace on the line is also not significant
 # (section 7.4.7).
-_KV_RE = re.compile(rf'^({_KW})\s*=\s*(.*?)\s*$')
+_KV_RE: re.Pattern[str] = re.compile(rf'^({_KW})\s*=\s*(.*?)\s*$')
 
 # Section 7.8.5: comment lines begin with the 'COMMENT' keyword followed by at
 # least one space; the remainder of the line is the comment value.
-_COMMENT_RE = re.compile(r'^COMMENT\s+(.*?)\s*$')
+_COMMENT_RE: re.Pattern[str] = re.compile(r'^COMMENT\s+(.*?)\s*$')
 
 # Section 7.4.2: *_START and *_STOP keywords are standalone (no '=' assignment).
 # Section 7.4.4: uppercase, no blanks, so a bare uppercase-only token is a delimiter.
-_DELIMITER_RE = re.compile(rf'^({_KW})$')
+_DELIMITER_RE: re.Pattern[str] = re.compile(rf'^({_KW})$')
 
 # Section 7.7.1.1, section 7.7.3.6: inline unit suffix '[unit]' may follow a value after
 # at least one blank; strip it entirely.
-_INLINE_UNIT_RE = re.compile(r'\s+\[.*?\]\s*$')
+_INLINE_UNIT_RE: re.Pattern[str] = re.compile(r'\s+\[.*?\]\s*$')
 
 
 def _classify(line: str) -> tuple[str, str | None, str | None]:
@@ -46,39 +44,39 @@ def _classify(line: str) -> tuple[str, str | None, str | None]:
         ``key`` and ``value`` are ``None`` for kinds that do not carry them.
     """
     if not line:
-        return ('blank', None, None)
+        return ("blank", None, None)
 
     # Section 7.3.5: lines beginning with '%' carry no assignable meaning.
     if line.startswith('%'):
-        return ('percent', None, None)
+        return ("percent", None, None)
 
     # Section 7.8.5: COMMENT keyword (exception to KVN; no '=' sign).
-    m: re.Match[str] | None = _COMMENT_RE.match(line)
-    if m:
-        return ('comment', None, m.group(1))
+    match: re.Match[str] | None = _COMMENT_RE.match(line)
+    if match:
+        return ("comment", None, match.group(1))
 
     # Section 7.4.2: *_START / *_STOP delimiters are standalone keywords with no
     # '=' and no value.
-    m: re.Match[str] | None = _DELIMITER_RE.match(line)
-    if m:
-        kw: str = m.group(1)
-        if kw.endswith('_START'):
-            return ('start', kw[: -len('_START')], None)
-        if kw.endswith('_STOP'):
-            return ('stop', kw[: -len('_STOP')], None)
+    match: re.Match[str] | None = _DELIMITER_RE.match(line)
+    if match:
+        keyword: str = match.group(1)
+        if keyword.endswith("_START"):
+            return ("start", keyword[: -len("_START")], None)
+        if keyword.endswith("_STOP"):
+            return ("stop", keyword[: -len("_STOP")], None)
         # Bare keyword that is neither _START nor _STOP: treat as data.
-        return ('data', None, line)
+        return ("data", None, line)
 
     # Section 7.4.1: KEY = VALUE assignment; strip inline unit suffix (section 7.7.1.1,
     # section 7.7.3.6).
-    m: re.Match[str] | None = _KV_RE.match(line)
-    if m:
-        key: str = m.group(1)
-        value: str = _INLINE_UNIT_RE.sub('', m.group(2))
-        return ('kv', key, value)
+    match: re.Match[str] | None = _KV_RE.match(line)
+    if match:
+        key: str = match.group(1)
+        value: str = _INLINE_UNIT_RE.sub("", match.group(2))
+        return ("kv", key, value)
 
     # Anything else is a raw data line (epoch row, covariance row, etc.).
-    return ('data', None, line)
+    return ("data", None, line)
 
 
 def parse_kvn(text: str) -> dict[str, Any]:
@@ -126,7 +124,7 @@ def parse_kvn(text: str) -> dict[str, Any]:
 
     def _flush_pending() -> None:
         """
-        Emit any accumulated inter-block content as a 'data' section.
+        Emit any accumulated inter-block content as a ``'data'`` section.
         """
         if pending_kvs or pending_data or pending_comments:
             sections.append({
@@ -144,25 +142,25 @@ def parse_kvn(text: str) -> dict[str, Any]:
     for raw_line in text.splitlines():
         kind, key, value = _classify(raw_line.strip())
 
-        if kind in ('blank', 'percent'):
+        if kind in ("blank", "percent"):
             # Section 7.3.5: blank lines ignored; '%' lines carry no meaning.
             continue
 
-        if kind == 'comment':
+        if kind == "comment":
             if current_block is not None:
                 # Section 7.8: comment inside a named block.
-                current_block['comments'].append(value)
-                current_block['ordered_items'].append(('comment', None, value))
+                current_block["comments"].append(value)
+                current_block["ordered_items"].append(("comment", None, value))
             elif header_done:
                 # Comment at the start of an inter-block data section.
                 pending_comments.append(value)
             else:
                 # Section 7.8: comment in the header section.
                 header_comments.append(value)
-                header_ordered_items.append(('comment', None, value))
+                header_ordered_items.append(("comment", None, value))
             continue
 
-        if kind == 'start':
+        if kind == "start":
             # Section 7.4.2: opening delimiter; begin a new named block.
             if header_done:
                 _flush_pending()
@@ -181,7 +179,7 @@ def parse_kvn(text: str) -> dict[str, Any]:
             }
             continue
 
-        if kind == 'stop':
+        if kind == "stop":
             # Section 7.4.2: closing delimiter; seal the current block.
             if current_block is not None:
                 sections.append(current_block)
@@ -190,11 +188,11 @@ def parse_kvn(text: str) -> dict[str, Any]:
 
         if kind == 'kv':
             if current_block is not None:
-                current_block['kvs'][key] = value          # Last value wins.
-                current_block['ordered_items'].append(('kv', key, value))
+                current_block["kvs"][key] = value          # Last value wins.
+                current_block["ordered_items"].append(("kv", key, value))
             elif not header_done:
                 header_kvs[key] = value                    # Last value wins.
-                header_ordered_items.append(('kv', key, value))
+                header_ordered_items.append(("kv", key, value))
             else:
                 # KV pair between named blocks: store in the pending ``KV`` dict
                 # so adapters can read them as typed fields (OPM state vector,
@@ -202,10 +200,10 @@ def parse_kvn(text: str) -> dict[str, Any]:
                 pending_kvs[key] = value
             continue
 
-        if kind == 'data':
+        if kind == "data":
             if current_block is not None:
-                current_block['data_lines'].append(value)
-                current_block['ordered_items'].append(('data', None, value))
+                current_block["data_lines"].append(value)
+                current_block["ordered_items"].append(("data", None, value))
             else:
                 header_done: bool = True
                 pending_data.append(value)

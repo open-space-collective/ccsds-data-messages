@@ -31,15 +31,15 @@ from orbit_data_messages.models.oem import OEM
 # order so we can read it from ``model_fields``.  We skip ``epoch`` and
 # ``cov_ref_frame`` (the two header KV fields) to get only the 21 matrix fields.
 _CML = OEM.Segment.CovarianceMatrix.CovarianceMatrixLines
-_CML_KW_MAP = build_keyword_map(_CML)
+_CML_KW_MAP: dict[str, str] = build_keyword_map(_CML)
 # Python field names in LTM order (preserves Pydantic field declaration order).
-_COV_FIELD_ORDER = [
-    fn for fn in _CML.model_fields
-    if fn not in ("epoch", "cov_ref_frame")
+_COV_FIELD_ORDER: list[str] = [
+    field_name for field_name in _CML.model_fields
+    if field_name not in ("epoch", "cov_ref_frame")
 ]
 # The KVN keyword that signals the start of a new covariance matrix block:
 # discovered via ``block_start=True`` on ``CovarianceMatrixLines.epoch``.
-_EPOCH_KEYWORD = block_start_keyword(_CML)
+_EPOCH_KEYWORD: str = block_start_keyword(_CML)
 
 
 def _parse_ephemeris_line(line: str) -> OEM.Segment.EphemerisData.EphemerisDataLine:
@@ -49,7 +49,7 @@ def _parse_ephemeris_line(line: str) -> OEM.Segment.EphemerisData.EphemerisDataL
     Each line begins with an epoch followed by position, velocity, and
     optionally acceleration components (section 5.2.4.1). Accelerations are
     all-or-nothing (section 5.2.4.2): 7 tokens give ``epoch + PV``; 10 tokens give
-    epoch + PV + accelerations.
+    ``epoch + PV + accelerations``.
 
     Args:
         line (str): A single raw ephemeris data line from the KVN file.
@@ -76,16 +76,26 @@ def _parse_ephemeris_line(line: str) -> OEM.Segment.EphemerisData.EphemerisDataL
         epoch, x, y, z, xd, yd, zd = tokens
         return OEM.Segment.EphemerisData.EphemerisDataLine(
             epoch=epoch,
-            x=float(x), y=float(y), z=float(z),
-            x_dot=float(xd), y_dot=float(yd), z_dot=float(zd),
+            x=float(x),
+            y=float(y),
+            z=float(z),
+            x_dot=float(xd),
+            y_dot=float(yd),
+            z_dot=float(zd),
         )
     if len(tokens) == 10:
         epoch, x, y, z, xd, yd, zd, xdd, ydd, zdd = tokens
         return OEM.Segment.EphemerisData.EphemerisDataLine(
             epoch=epoch,
-            x=float(x), y=float(y), z=float(z),
-            x_dot=float(xd), y_dot=float(yd), z_dot=float(zd),
-            x_ddot=float(xdd), y_ddot=float(ydd), z_ddot=float(zdd),
+            x=float(x),
+            y=float(y),
+            z=float(z),
+            x_dot=float(xd),
+            y_dot=float(yd),
+            z_dot=float(zd),
+            x_ddot=float(xdd),
+            y_ddot=float(ydd),
+            z_ddot=float(zdd),
         )
     raise ValueError(
         f"An OEM ephemeris line must have 7 tokens (epoch + position + velocity) "
@@ -93,9 +103,7 @@ def _parse_ephemeris_line(line: str) -> OEM.Segment.EphemerisData.EphemerisDataL
     )
 
 
-def _parse_covariance_block(
-    block: dict[str, Any],
-) -> OEM.Segment.CovarianceMatrix:
+def _parse_covariance_block(block: dict[str, Any]) -> OEM.Segment.CovarianceMatrix:
     """
     Parse a KVN ``COVARIANCE`` block into a validated ``OEM.Segment.CovarianceMatrix`` model.
 
@@ -121,8 +129,10 @@ def _parse_covariance_block(
     # Walk ordered_items to group [kv* data*]+ into individual matrices.
     matrices: list[OEM.Segment.CovarianceMatrix.CovarianceMatrixLines] = []
     current_kvs: dict[str, str] = {}
-    current_values: list[float] = []  # Section 5.2.5.4: data line contains whitespace-separated floats.
+    current_values: list[float] = []  # Section 5.2.5.4, 5.2.5.5: data line contains whitespace-separated floats.
 
+    # Nested function (also known as an inner function) used to
+    # encapsulate helper logic within ``_parse_covariance_block()``.
     def _flush_matrix() -> None:
         """
         Flush the current covariance matrix to the list of matrices.
@@ -134,7 +144,11 @@ def _parse_covariance_block(
                 f"Each OEM covariance matrix must have exactly 21 lower-triangular "
                 f"elements, got {len(current_values)}."
             )
-        kwargs: dict[str, Any] = map_kvs(current_kvs, [], OEM.Segment.CovarianceMatrix.CovarianceMatrixLines)
+        kwargs: dict[str, Any] = map_kvs(
+            current_kvs,
+            comments,
+            OEM.Segment.CovarianceMatrix.CovarianceMatrixLines,
+        )
         for i, field_name in enumerate(_COV_FIELD_ORDER):
             kwargs[field_name] = current_values[i]
         matrices.append(
@@ -156,8 +170,8 @@ def _parse_covariance_block(
                 current_values = []
             current_kvs[key] = value
         elif kind == "data":
-            # Section 5.2.5.4: data line contains whitespace-separated floats.
-            current_values.extend(float(tok) for tok in value.split())
+            # Section 5.2.5.4, 5.2.5.5: data line contains whitespace-separated floats.
+            current_values.extend(float(token) for token in value.split())
 
     _flush_matrix()
 
@@ -173,7 +187,7 @@ def _parse_segment(
     cov_block: dict[str, Any] | None,
 ) -> OEM.Segment:
     """
-    Build one validated ``OEM.Segment`` from its constituent parsed sections.
+    Build one validated ``OEM.Segment`` from its parsed metadata, ephemeris data, and optional covariance block.
 
     Args:
         meta_block (dict[str, Any]): Parsed ``META`` block dict.
@@ -188,7 +202,9 @@ def _parse_segment(
     """
     # Metadata: keyword map from FieldMetadata annotations (no hardcoding).
     meta_kwargs: dict[str, Any] = map_kvs(
-        meta_block["kvs"], meta_block["comments"], OEM.Segment.Metadata
+        meta_block["kvs"],
+        meta_block["comments"],
+        OEM.Segment.Metadata,
     )
     metadata: OEM.Segment.Metadata = OEM.Segment.Metadata(**meta_kwargs)
 
@@ -221,35 +237,33 @@ class KVNOEMReader:
     never swallowed: let it propagate to the caller.
     """
 
-    def read(self, path: Path) -> OEM:
+    def _parse(
+        self,
+        text: str,
+    ) -> OEM:
         """
-        Read a KVN OEM file and return a validated ``OEM`` domain model.
+        Parse a KVN-format OEM file and return a validated OEM domain model.
 
         Args:
-            path (Path): Path to the KVN OEM file.
+            text (str): The KVN-format OEM file content.
 
         Returns:
             OEM: Fully validated OEM domain model.
-
-        Raises:
-            pydantic.ValidationError: If the parsed content fails domain model
-                validation.
-            ValueError: If a covariance block does not contain exactly 21 LTM
-                elements, or an ephemeris line has an unexpected token count.
         """
-        text: str = path.read_text()
         raw: dict[str, Any] = parse_kvn(text)
         sections: list[dict[str, Any]] = split_blocks(raw)
 
-        # Derive block delimiter names from the model's Delineation attrs
-        # no string literals like "META_START" appear in this adapter.
+        # Derive block delimiter names from the model's Delineation attributes.
+        # No string literals like "META_START" appear in this adapter.
         meta_delimiter: str = block_delimiter_name(OEM.Segment.Metadata)          # "META"
         cov_delimiter: str = block_delimiter_name(OEM.Segment.CovarianceMatrix)   # "COVARIANCE"
 
         # Header
         header_sec: dict[str, Any] = sections[0]
         header_kwargs: dict[str, Any] = map_kvs(
-            header_sec["kvs"], header_sec["comments"], OEM.Header
+            header_sec["kvs"],
+            header_sec["comments"],
+            OEM.Header,
         )
         header: OEM.Header = OEM.Header(**header_kwargs)
 
@@ -260,18 +274,18 @@ class KVNOEMReader:
         segments: list[OEM.Segment] = []
         i: int = 0
         while i < len(body):
-            sec: dict[str, Any] = body[i]
-            if sec["type"] != "block" or sec["delimiter"] != meta_delimiter:
+            section: dict[str, Any] = body[i]
+            if section["type"] != "block" or section["delimiter"] != meta_delimiter:
                 i += 1
                 continue
 
-            meta_block: dict[str, Any] = sec
+            meta_block: dict[str, Any] = section
             i += 1
 
             # Ephemeris data section immediately follows META.
-            data_sec: dict[str, Any] = {"data_lines": [], "comments": [], "kvs": {}}
+            data_section: dict[str, Any] = {"data_lines": [], "comments": [], "kvs": {}}
             if i < len(body) and body[i]["type"] == "data":
-                data_sec = body[i]
+                data_section = body[i]
                 i += 1
 
             # Optional COVARIANCE block.
@@ -285,10 +299,44 @@ class KVNOEMReader:
                 i += 1
 
             segments.append(
-                _parse_segment(meta_block, data_sec, cov_block)
+                _parse_segment(
+                    meta_block,
+                    data_section,
+                    cov_block,
+                ),
             )
 
-        return OEM(header=header, segments=segments)
+        return OEM(
+            header=header,
+            segments=segments,
+        )
+
+    def read(
+        self,
+        path: Path,
+    ) -> OEM:
+        """
+        Read a KVN OEM file and return a validated ``OEM`` domain model.
+
+        Args:
+            path (Path): Path to the KVN OEM file.
+
+        Returns:
+            OEM: Fully validated OEM domain model.
+        """
+        return self._parse(path.read_text())
+
+    def read_string(self, content: str) -> OEM:
+        """
+        Read an OEM KVN string and return a validated OEM domain model.
+
+        Args:
+            content (str): The OEM KVN string content.
+
+        Returns:
+            OEM: Fully validated OEM domain model.
+        """
+        return self._parse(content)
 
 
 OrbitEphemerisMessageKVNReader = KVNOEMReader

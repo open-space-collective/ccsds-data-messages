@@ -10,7 +10,8 @@ Implementation rule: pending comments are flushed to the logical block of the fi
 Spec references:
 - Section 4.2 (OMM structure)
 - Section 7.3-7.4 (KVN rules)
-- Section 7.8.8 (comment placement), Annex G (examples).
+- Section 7.8.8 (comments)
+- Annex G (examples)
 """
 from __future__ import annotations
 
@@ -23,12 +24,12 @@ from orbit_data_messages.io.kvn._utils import map_kvs
 from orbit_data_messages.io.kvn.parser import parse_kvn
 from orbit_data_messages.models.omm import OMM
 
-_HEADER_MAP = build_keyword_map(OMM.Header)
-_META_MAP   = build_keyword_map(OMM.Metadata)
-_ME_MAP     = build_keyword_map(OMM.Data.MeanKeplerianElements)
-_SP_MAP     = build_keyword_map(OMM.Data.SpacecraftParameters)
-_TLE_MAP    = build_keyword_map(OMM.Data.TLERelatedParameters)
-_COV_MAP    = build_keyword_map(OMM.Data.CovarianceMatrix)
+_HEADER_MAP: dict[str, str] = build_keyword_map(OMM.Header)
+_META_MAP: dict[str, str] = build_keyword_map(OMM.Metadata)
+_ME_MAP: dict[str, str] = build_keyword_map(OMM.Data.MeanKeplerianElements)
+_SP_MAP: dict[str, str] = build_keyword_map(OMM.Data.SpacecraftParameters)
+_TLE_MAP: dict[str, str] = build_keyword_map(OMM.Data.TLERelatedParameters)
+_COV_MAP: dict[str, str] = build_keyword_map(OMM.Data.CovarianceMatrix)
 
 
 class KVNOMMReader:
@@ -39,20 +40,7 @@ class KVNOMMReader:
     never swallowed: let it propagate to the caller.
     """
 
-    def read(self, path: Path) -> OMM:
-        """
-        Read a KVN OMM file and return a validated ``OMM`` domain model.
-
-        Args:
-            path (Path): Path to the KVN OMM file.
-
-        Returns:
-            OMM: Validated OMM domain model.
-
-        Raises:
-            pydantic.ValidationError: If the parsed content fails domain model validation.
-        """
-        text: str = path.read_text()
+    def _parse(self, text: str) -> OMM:
         raw: dict[str, Any] = parse_kvn(text)
         ordered: list[tuple[str, str | None, str | None]] = raw.get("header_ordered_items", [])
 
@@ -82,42 +70,70 @@ class KVNOMMReader:
                 (_COV_MAP,    cov_kvs,    cov_comments),
             ],
             user_kvs=user_kvs,
-            # OMM has no maneuver section (section 4.2.4.8).
+            # OMM has no maneuver section (section 4.2.4.8): no maneuver_key or maneuver_map needed.
         )
 
         header: OMM.Header = OMM.Header(
-            **map_kvs(header_kvs, header_comments, OMM.Header)
+            **map_kvs(
+                header_kvs,
+                header_comments,
+                OMM.Header,
+            )
         )
         metadata: OMM.Metadata = OMM.Metadata(
-            **map_kvs(meta_kvs, meta_comments, OMM.Metadata)
+            **map_kvs(
+                meta_kvs,
+                meta_comments,
+                OMM.Metadata,
+            )
         )
         mean_keplerian: OMM.Data.MeanKeplerianElements = OMM.Data.MeanKeplerianElements(
-            **map_kvs(me_kvs, me_comments, OMM.Data.MeanKeplerianElements)
+            **map_kvs(
+                me_kvs,
+                me_comments,
+                OMM.Data.MeanKeplerianElements,
+            )
         )
         spacecraft: OMM.Data.SpacecraftParameters | None = (
             OMM.Data.SpacecraftParameters(
-                **map_kvs(sp_kvs, sp_comments, OMM.Data.SpacecraftParameters)
+                **map_kvs(
+                    sp_kvs,
+                    sp_comments,
+                    OMM.Data.SpacecraftParameters,
+                )
             )
             if sp_kvs
             else None
         )
         tle_params: OMM.Data.TLERelatedParameters | None = (
             OMM.Data.TLERelatedParameters(
-                **map_kvs(tle_kvs, tle_comments, OMM.Data.TLERelatedParameters)
+                **map_kvs(
+                    tle_kvs,
+                    tle_comments,
+                    OMM.Data.TLERelatedParameters,
+                )
             )
             if tle_kvs
             else None
         )
         cov: OMM.Data.CovarianceMatrix | None = (
             OMM.Data.CovarianceMatrix(
-                **map_kvs(cov_kvs, cov_comments, OMM.Data.CovarianceMatrix)
+                **map_kvs(
+                    cov_kvs,
+                    cov_comments,
+                    OMM.Data.CovarianceMatrix,
+                )
             )
             if cov_kvs
             else None
         )
         user: OMM.Data.UserDefinedParameters | None = (
             OMM.Data.UserDefinedParameters(
-                **map_kvs(user_kvs, [], OMM.Data.UserDefinedParameters)
+                **map_kvs(
+                    user_kvs,
+                    [],
+                    OMM.Data.UserDefinedParameters,
+                )
             )
             if user_kvs
             else None
@@ -136,6 +152,36 @@ class KVNOMMReader:
             metadata=metadata,
             data=data,
         )
+
+    def read(
+        self,
+        path: Path,
+    ) -> OMM:
+        """
+        Read a KVN OMM file and return a validated OMM domain model.
+
+        Args:
+            path (Path): The path to the KVN OMM file.
+
+        Returns:
+            OMM: Fully validated OMM domain model.
+        """
+        return self._parse(path.read_text())
+
+    def read_string(
+        self,
+        content: str,
+    ) -> OMM:
+        """
+        Read an OMM KVN string and return a validated OMM domain model.
+
+        Args:
+            content (str): The KVN-format OMM file content.
+
+        Returns:
+            OMM: Fully validated OMM domain model.
+        """
+        return self._parse(content)
 
 
 OrbitMeanElementsMessageKVNReader = KVNOMMReader

@@ -10,7 +10,9 @@ Spec references: section 3.2 (OPM structure), section 7.3-7.4 (KVN rules), secti
 """
 from __future__ import annotations
 
+import io
 from pathlib import Path
+from typing import TextIO
 
 from orbit_data_messages.io.kvn._utils import emit_block
 from orbit_data_messages.io.options import WriterOptions
@@ -24,6 +26,59 @@ class KVNOPMWriter:
     Satisfies ``MessageWriterPort`` structurally.
     """
 
+    def _write(
+        self,
+        message: OPM,
+        out: TextIO,
+        *,
+        options: WriterOptions | None = None,
+    ) -> None:
+        """
+        Serialize a validated OPM domain model to a KVN file.
+
+        Args:
+            message (OPM): Validated OPM instance to serialize.
+            out (TextIO): Destination text stream.
+            options (WriterOptions | None): Formatting options. When omitted, ``WriterOptions()`` defaults apply.
+        """
+        # Header (table 3-1): flat, no delimiters.
+        emit_block(message.header, out, options=options)
+        out.write("\n")
+
+        # Metadata (table 3-2): flat, no delimiters per spec Annex G.
+        emit_block(message.metadata, out, options=options)
+        out.write("\n")
+
+        # State vector (table 3-3, section 3.2.4): mandatory.
+        emit_block(message.data.state_vector, out, options=options)
+        out.write("\n")
+
+        # Osculating Keplerian elements (table 3-3): optional, all-or-none.
+        if message.data.osculating_keplerian_elements is not None:
+            emit_block(message.data.osculating_keplerian_elements, out, options=options)
+            out.write("\n")
+
+        # Spacecraft parameters (table 3-3): optional.
+        if message.data.spacecraft_parameters is not None:
+            emit_block(message.data.spacecraft_parameters, out, options=options)
+            out.write("\n")
+
+        # Covariance matrix (table 3-3, section 3.2.4.10): flat KVs, no
+        # ``COVARIANCE_START``/``COVARIANCE_STOP`` block (OPM format is entirely flat).
+        if message.data.covariance_matrix is not None:
+            emit_block(message.data.covariance_matrix, out, options=options)
+            out.write("\n")
+
+        # Maneuver parameters (table 3-3, section 3.2.4.8): repeated per maneuver (OPM only: OMM has no maneuver section: section 4.2.4.8).
+        if message.data.maneuvers:
+            for maneuver in message.data.maneuvers:
+                emit_block(maneuver, out, options=options)
+                out.write("\n")
+
+        # User-defined parameters (table 3-3, section 3.2.4.12): optional.
+        if message.data.user_defined is not None:
+            emit_block(message.data.user_defined, out, options=options)
+
     def write(
         self,
         message: OPM,
@@ -36,47 +91,31 @@ class KVNOPMWriter:
 
         Args:
             message (OPM): Validated OPM instance to serialize.
-            path (Path): Destination file. Created or overwritten.
+            path (Path): The path to the KVN OPM file.
             options (WriterOptions | None): Formatting options. When omitted, ``WriterOptions()`` defaults apply.
         """
         with path.open("w", encoding="utf-8") as out:
-            # Header (table 3-1): flat, no delimiters.
-            emit_block(message.header, out, options=options)
-            out.write("\n")
+            self._write(message, out, options=options)
 
-            # Metadata (table 3-2): flat, no delimiters per spec Annex G.
-            emit_block(message.metadata, out, options=options)
-            out.write("\n")
+    def write_string(
+        self,
+        message: OPM,
+        *,
+        options: WriterOptions | None = None,
+    ) -> str:
+        """
+        Serialize a validated OPM domain model to a KVN string.
 
-            # State vector (table 3-3, section 3.2.4): mandatory.
-            emit_block(message.data.state_vector, out, options=options)
-            out.write("\n")
+        Args:
+            message (OPM): Validated OPM instance to serialize.
+            options (WriterOptions | None): Formatting options. When omitted, ``WriterOptions()`` defaults apply.
 
-            # Osculating Keplerian elements (table 3-3): optional, all-or-none.
-            if message.data.osculating_keplerian_elements is not None:
-                emit_block(message.data.osculating_keplerian_elements, out, options=options)
-                out.write("\n")
-
-            # Spacecraft parameters (table 3-3): optional.
-            if message.data.spacecraft_parameters is not None:
-                emit_block(message.data.spacecraft_parameters, out, options=options)
-                out.write("\n")
-
-            # Covariance matrix (table 3-3, section 3.2.4.10): flat KVs, no
-            # ``COVARIANCE_START``/``COVARIANCE_STOP`` block (OPM format is entirely flat).
-            if message.data.covariance_matrix is not None:
-                emit_block(message.data.covariance_matrix, out, options=options)
-                out.write("\n")
-
-            # Maneuver parameters (table 3-3, section 3.2.4.8): repeated per maneuver (OPM only: OMM has no maneuver section: section 4.2.4.8).
-            if message.data.maneuvers:
-                for maneuver in message.data.maneuvers:
-                    emit_block(maneuver, out, options=options)
-                    out.write("\n")
-
-            # User-defined parameters (table 3-3, section 3.2.4.12): optional.
-            if message.data.user_defined is not None:
-                emit_block(message.data.user_defined, out, options=options)
+        Returns:
+            str: The serialized content.
+        """
+        with io.StringIO() as buffer:
+            self._write(message, buffer, options=options)
+            return buffer.getvalue()
 
 
 OrbitParameterMessageKVNWriter = KVNOPMWriter
