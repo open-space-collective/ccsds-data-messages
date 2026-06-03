@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from dataclasses import field
 
 
-@dataclass
+@dataclass(frozen=True)
 class WriterOptions:
     """
     Formatting options for all ``CCSDSDataMessage`` file writers.

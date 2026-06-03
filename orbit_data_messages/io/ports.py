@@ -8,18 +8,20 @@ from orbit_data_messages.models.base import CCSDSDataMessage
 
 
 class MessageReaderPort(Protocol):
-    """
-    Structural protocol for ``CCSDSDataMessage`` file readers.
-    """
+    def read(
+        self,
+        path: Path,
+    ) -> CCSDSDataMessage:
+        ...
 
-    def read(self, path: Path) -> CCSDSDataMessage: ...
+    def read_string(
+        self,
+        content: str,
+    ) -> CCSDSDataMessage:
+        ...
 
 
 class MessageWriterPort(Protocol):
-    """
-    Structural protocol for ``CCSDSDataMessage`` file writers.
-    """
-
     def write(
         self,
         message: CCSDSDataMessage,
@@ -27,3 +29,10 @@ class MessageWriterPort(Protocol):
         *,
         options: WriterOptions | None = None,
     ) -> None: ...
+
+    def write_string(
+        self,
+        message: CCSDSDataMessage,
+        *,
+        options: WriterOptions | None = None,
+    ) -> str: ...

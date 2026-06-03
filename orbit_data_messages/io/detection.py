@@ -1,88 +1,94 @@
 """
 Spec references:
-    - section 7.3.5: Blank lines may be ignored.
-    - section 7.3.6: The first header line is the first non-blank line.
-    - section 7.9.1: KVN version keywords: ``CCSDS_OPM_VERS``, ``CCSDS_OMM_VERS``,
-            ``CCSDS_OEM_VERS``, ``CCSDS_OCM_VERS``.
-    - section 8.2: First line of an XML file: ``<?xml version="1.0" encoding="UTF-8">``.
-    - section 8.3.2: XML root element tags: ``<opm>``, ``<omm>``, ``<oem>``, ``<ocm>``.
+- Section 7.3.5: Blank lines may be ignored.
+- Section 7.3.6: The first header line is the first non-blank line.
+- Section 7.9.1: KVN version keywords: ``CCSDS_OPM_VERS``, ``CCSDS_OMM_VERS``, ``CCSDS_OEM_VERS``, ``CCSDS_OCM_VERS``.
+- Section 8.2: First line of an XML file: ``<?xml version="1.0" encoding="UTF-8"?>``.
+- Section 8.3.2: XML root element tags: ``<opm>``, ``<omm>``, ``<oem>``, ``<ocm>``.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Literal
 
-_MessageType = Literal["oem", "omm", "opm", "ocm"]
+from orbit_data_messages.io.format import MessageFormat
+from orbit_data_messages.io.format import MessageType
 
-_ODM_TYPES: frozenset[str] = frozenset({"oem", "omm", "opm", "ocm"})
+_ODM_TYPES: frozenset[str] = frozenset(MessageType)
 
 _XML_TAG_RE: re.Pattern[str] = re.compile(r"<([a-z]+)[\s>/]")               # section 8.3.2
 _KVN_VERS_RE: re.Pattern[str] = re.compile(r"CCSDS_(OEM|OMM|OPM|OCM)_VERS") # section 7.9.1
 
-_STEM_HINTS: dict[str, _MessageType] = {
-    "ephemeris": "oem",
-    "comprehensive": "ocm",
-    "mean": "omm",
-    "parameter": "opm",
+_STEM_HINTS: dict[str, MessageType] = {
+    "ephemeris": MessageType.OEM,
+    "comprehensive": MessageType.OCM,
+    "mean": MessageType.OMM,
+    "parameter": MessageType.OPM,
 }
 
 
 def _first_nonblank_line(path: Path) -> str:
-    with path.open(encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            stripped = line.strip()
+    with path.open(encoding="utf-8", errors="replace") as file:
+        for line in file:
+            stripped: str = line.strip()
             if stripped:
                 return stripped
     return ""
 
 
-def _sniff_kvn_type(path: Path) -> _MessageType | None:
-    m: re.Match[str] | None = _KVN_VERS_RE.match(_first_nonblank_line(path))
-    return m.group(1).lower() if m else None  # type: ignore[return-value]
+def _sniff_kvn_type(path: Path) -> MessageType | None:
+    match: re.Match[str] | None = _KVN_VERS_RE.match(_first_nonblank_line(path))
+    return MessageType(match.group(1).lower()) if match else None
 
 
-def _sniff_xml_type(path: Path) -> _MessageType | None:
-    with path.open(encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            for m in _XML_TAG_RE.finditer(line):
-                if (tag := m.group(1)) in _ODM_TYPES:
-                    return tag  # type: ignore[return-value]
+def _sniff_xml_type(path: Path) -> MessageType | None:
+    with path.open(encoding="utf-8", errors="replace") as file:
+        for line in file:
+            for match in _XML_TAG_RE.finditer(line):
+                if (tag := match.group(1)) in _ODM_TYPES:
+                    return MessageType(tag)
     return None
 
 
-def detect_format(path: Path) -> Literal["kvn", "xml"]:
-    """
-    Return ``'kvn'`` or ``'xml'`` for path.
-    """
+def detect_format(path: Path) -> MessageFormat:
     suffix: str = path.suffix.lower()
     if suffix == ".xml":
-        return "xml"
+        return MessageFormat.XML
     if suffix[1:] in _ODM_TYPES:
-        return "kvn"
+        return MessageFormat.KVN
     first: str = _first_nonblank_line(path)
     if first.startswith("<"):
-        return "xml"
-    return "kvn"
+        return MessageFormat.XML
+    return MessageFormat.KVN
 
 
-def detect_message_type(path: Path, fmt: str) -> _MessageType:
+def detect_message_type(
+    path: Path,
+    fmt: MessageFormat | str,
+) -> MessageType:
     """
     Return the CCSDS message type for ``path``.
+
+    Args:
+        path (Path): The path to the file to detect the format of.
+        fmt (MessageFormat | str): The format to detect the message type of.
+
+    Returns:
+        MessageType: The CCSDS message type.
 
     Raises:
         ValueError: if the type cannot be determined.
     """
-    msg_type: str = path.suffix.lower()[1:]
-    if msg_type in _ODM_TYPES:
-        return msg_type  # type: ignore[return-value]
+    message_type: str = path.suffix.lower()[1:]
+    if message_type in _ODM_TYPES:
+        return MessageType(message_type)
 
     stem: str = path.stem.lower()
     for keyword, hint in _STEM_HINTS.items():
         if keyword in stem:
             return hint
 
-    sniffed: _MessageType | None = _sniff_kvn_type(path) if fmt == "kvn" else _sniff_xml_type(path) if fmt == "xml" else None
+    sniffed: MessageType | None = _sniff_kvn_type(path) if fmt == MessageFormat.KVN else _sniff_xml_type(path) if fmt == MessageFormat.XML else None
     if sniffed is not None:
         return sniffed
 
