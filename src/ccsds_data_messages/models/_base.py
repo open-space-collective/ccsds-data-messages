@@ -138,14 +138,14 @@ class BaseHeader(BaseModel):
     creation_date: CreationDate
 
     originator: Annotated[
-        Organization,
+        Organization | str,
         Field(
             description=(
                 "Creating agency or operator. "
                 "Select from the SANA Registry of Organizations (Annex B1, "
                 "https://sanaregistry.org/r/organizations): use the Abbreviation "
                 "column value when present, or the Name column when no abbreviation "
-                "is listed. To add an unlisted organization, follow SANA procedures."
+                "is listed. Non-standard values are accepted as plain strings."
             ),
         ),
         FieldMetadata(keyword="ORIGINATOR"),
@@ -205,13 +205,14 @@ class BaseMetadata(BaseModel):
     ]
 
     center_name: Annotated[
-        CenterName,
+        CenterName | str,
         Field(
             description=(
-                "Origin of the reference frame. Must be a natural solar "
+                "Origin of the reference frame. Typically a natural solar "
                 "system body, planet barycenter, or solar system barycenter. "
                 "Select from the SANA Registry of Orbit Centers (Annex B2, "
-                "https://sanaregistry.org/r/orbit_centers): use the Name column value."
+                "https://sanaregistry.org/r/orbit_centers): use the Name column value. "
+                "Non-standard bodies are accepted as plain strings."
             ),
         ),
         FieldMetadata(keyword="CENTER_NAME"),
@@ -286,7 +287,7 @@ class BaseCovarianceMatrix(BaseModel):
     comment: Comment = None
 
     cov_ref_frame: Annotated[
-        ManCovRefFrame | RefFrame | None,
+        ManCovRefFrame | RefFrame | str | None,
         Field(
             default=None,
             description=(
@@ -295,8 +296,9 @@ class BaseCovarianceMatrix(BaseModel):
                 "https://sanaregistry.org/r/orbit_relative_reference_frames) "
                 "lists the standard set; values outside that set are valid when "
                 "documented in an ICD. Parametric frames (e.g. ITRF2014, ICRF3) "
-                "are supported via RefFrame.parametric()."
-                "inertial frames (e.g. TEME, GCRF) are also accepted in practice. "
+                "are supported via RefFrame.parametric(). "
+                "Inertial frames (e.g. TEME, GCRF) are also accepted in practice. "
+                "Non-standard values are accepted as plain strings. "
                 "May be omitted if identical to the metadata REF_FRAME."
             ),
         ),
