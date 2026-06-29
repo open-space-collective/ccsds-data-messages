@@ -1,11 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """
-Maps (format, message_type) pairs to reader and writer adapter classes using
-lazy string references: no adapter module is imported at registry load time.
-Adapter classes are lazily imported on first request.
+Maps ``(format, message_type)`` pairs to reader and writer adapter classes using lazy string
+references: no adapter module is imported at registry load time. Adapter classes are lazily
+imported on first request.
 
 Adding a built-in adapter requires one new entry in ``_READERS`` or ``_WRITERS`` only.
-Alternatively, third-party adapters can be registered at runtime via ``register_reader`` /
-``register_writer``, which accept a direct class (not a string reference).
+Alternatively, third-party adapters can be registered at runtime via ``register_reader()`` /
+``register_writer()``, which accept a direct class (not a string reference).
 """
 from __future__ import annotations
 
