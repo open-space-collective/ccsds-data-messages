@@ -25,7 +25,7 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Type check
-        run: uv run mypy ccsds_data_messages
+        run: uv run mypy -p ccsds_data_messages
 
       - name: Pylint
         run: uv run pylint ccsds_data_messages
