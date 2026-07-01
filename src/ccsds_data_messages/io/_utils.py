@@ -119,7 +119,7 @@ def format_value(
     if isinstance(value, float):
         if not math.isfinite(value):
             # §7.5.6/7.5.7 define fixed-point and floating-point values as closed
-            # grammars ("shall consist of" decimal digits, sign, exponent digits) —
+            # grammars ("shall consist of" decimal digits, sign, exponent digits) -
             # neither grammar can produce "nan"/"inf"/"-inf", so they have no valid
             # serialization, even though the spec never names NaN/Inf explicitly.
             raise ValueError(

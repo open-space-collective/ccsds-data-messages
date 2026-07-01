@@ -1,5 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
+"""
+Writer-facing output formatting options, shared across all KVN and XML writers.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -57,8 +61,8 @@ class WriterOptions:
     """
     Right-justify OEM ephemeris data columns so all rows have the same column widths.
 
-    Note: this option applies only to OEM KVN ephemeris lines. OCM trajectory, covariance,
-    and maneuver data lines are written verbatim regardless of this setting.
+    This option applies only to OEM KVN ephemeris lines. OCM trajectory, covariance, and
+    maneuver data lines are written verbatim regardless of this setting.
 
     Two-pass: all lines in a segment are formatted first, then written with per-column
     fixed widths (the rightmost character of each value aligns across rows). Section 5.2.4.3
@@ -113,9 +117,9 @@ class WriterOptions:
     A field is suppressed when either (a) it was not in the set of fields
     explicitly provided at construction time (``model.model_fields_set``), or
     (b) its value equals the CCSDS spec-defined default declared via
-    ``FieldMetadata(spec_default=...)`` — not the Pydantic field default.
+    ``FieldMetadata(spec_default=...)`` - not the Pydantic field default.
 
-    Note: (a) has no observable effect today. Every optional field's Pydantic
+    (a) has no observable effect today. Every optional field's Pydantic
     default is ``None``, and ``None``-valued fields are already omitted from
     output regardless of this option, so a field can only reach (a) with a
     non-``None`` value if some future field is given a non-``None`` Python

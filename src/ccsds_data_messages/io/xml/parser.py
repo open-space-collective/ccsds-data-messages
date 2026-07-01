@@ -33,7 +33,7 @@ def parse_xml_file(path: Path) -> ET.Element:
 
     Uses ``defusedxml`` rather than stdlib ``ElementTree`` directly: CCSDS ODM/XML
     is a message-*exchange* format, so content legitimately arrives from external,
-    only partially-trusted senders — raw ``ElementTree`` is vulnerable to
+    only partially-trusted senders - raw ``ElementTree`` is vulnerable to
     entity-expansion ("billion laughs") DoS on such input.
 
     Raises:

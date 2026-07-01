@@ -3,7 +3,7 @@ KVN adapter: Orbit Comprehensive Message reader.
 
 OCM KVN is block-structured: the file begins with a header section (flat KV pairs),
 followed by named blocks delimited by *_START/*_STOP keywords. Block names are
-derived from the Delineation class variables on the OCM model — no strings are
+derived from the Delineation class variables on the OCM model - no strings are
 hardcoded here.
 
 Spec references:
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 _T = TypeVar("_T", bound=BaseModel)
 
-# Block delimiter names — derived from model Delineation class variables; no literals.
+# Block delimiter names - derived from model Delineation class variables; no literals.
 _META_D: str = required_block_delimiter_name(OCM.Metadata)  # "META"
 _TRAJ_D: str = required_block_delimiter_name(OCM.TrajectoryStateTimeHistory)  # "TRAJ"
 _PHYS_D: str = required_block_delimiter_name(

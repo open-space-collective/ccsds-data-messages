@@ -111,7 +111,7 @@ class KVNOPMReader:
             if line.keyword.startswith("USER_DEFINED_"):
                 # §7.8.7: a COMMENT at the start of the User-Defined Parameters
                 # block is valid placement, but UserDefinedParameters has no
-                # comment field to attribute it to — known limitation, dropped.
+                # comment field to attribute it to - known limitation, dropped.
                 pending_comments.clear()
                 user_kvs[line.keyword[len("USER_DEFINED_") :]] = line.value
                 continue

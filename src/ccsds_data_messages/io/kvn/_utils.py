@@ -305,9 +305,6 @@ def emit_kvs(
         out (SupportsWrite): Destination text stream.
         options (WriterOptions | None): Formatting options. Defaults to None,
             which applies ``WriterOptions()`` defaults.
-
-    Returns:
-        None
     """
     keyword_map: dict[str, str] = build_keyword_map(type(model))
     field_to_keyword: dict[str, str] = {fn: kw for kw, fn in keyword_map.items()}
@@ -317,7 +314,7 @@ def emit_kvs(
 
     # Phase 1: collect entries.
     # entries: pending KEYWORD = value / COMMENT lines, in declaration order.
-    # user_entries: (key_name, value) for USER_DEFINED_* pairs — written last.
+    # user_entries: (key_name, value) for USER_DEFINED_* pairs - written last.
     entries: list[_Entry] = []
     user_entries: list[tuple[str, str]] = []
 
@@ -382,12 +379,13 @@ def emit_kvs(
     }
     entries.sort(key=lambda entry: keyword_order.get(entry.keyword, 50))
 
+    max_width: int
     if align:
         keyword_widths = [len(entry.keyword) for entry in entries if not entry.is_comment]
         keyword_widths += [len(f"USER_DEFINED_{k}") for k, _ in user_entries]
-        max_width: int = max(keyword_widths, default=0)
+        max_width = max(keyword_widths, default=0)
     else:
-        max_width: int = 0
+        max_width = 0
 
     for keyword, value, spec, is_comment in entries:
         if is_comment:
@@ -427,9 +425,6 @@ def emit_block(
             trajectory, covariance, and maneuver lines stored as ``list[str]``
             without ``FieldMetadata``. Defaults to None.
         options (WriterOptions | None): Formatting options. Defaults to None.
-
-    Returns:
-        None
     """
     if delineation := get_delineation(type(model)):
         out.write(f"{delineation.start}\n")

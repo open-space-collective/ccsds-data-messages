@@ -56,7 +56,7 @@ class KVNOCMWriter:
             message (OCM): Validated OCM instance to serialize.
             out (SupportsWrite): Destination text stream.
             options (WriterOptions | None): Formatting options. When omitted,
-                ``WriterOptions(suppress_defaults=True)`` is used — OCM spec
+                ``WriterOptions(suppress_defaults=True)`` is used - OCM spec
                 fixtures omit keyword lines whose value is the spec-defined
                 default (e.g. ``TIME_SYSTEM = UTC``, ``DC_TYPE = CONTINUOUS``).
         """

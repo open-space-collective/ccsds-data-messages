@@ -91,7 +91,7 @@ def _classify(stripped_line: str) -> KVNLine:
     if _BARE_COMMENT_RE.match(stripped_line):
         # §7.8.5: COMMENT must be followed by at least one space. A bare COMMENT
         # falls through to DataLine like any other unrecognized line, which all
-        # readers silently skip — warn so the issue doesn't vanish without a trace.
+        # readers silently skip - warn so the issue doesn't vanish without a trace.
         # No stacklevel: it would only point inside parse_kvn's own comprehension,
         # itself internal to this module, not at any meaningful external caller.
         # Must be checked before _DELIMITER_RE: "COMMENT" alone also matches that
@@ -123,7 +123,7 @@ def _classify(stripped_line: str) -> KVNLine:
     if _MIXED_CASE_KV_RE.match(stripped_line):
         # §7.4.4: keywords must be uppercase. A mixed-case 'Key = value' line falls
         # through to DataLine like any other unrecognized line and is silently
-        # skipped by all readers — warn so the issue doesn't vanish without a trace.
+        # skipped by all readers - warn so the issue doesn't vanish without a trace.
         # No stacklevel: see note above.
         warnings.warn(  # noqa: B028
             f"Ignoring keyword line with non-uppercase keyword: {stripped_line!r}. "

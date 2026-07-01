@@ -7,7 +7,7 @@ model: no strings are hardcoded here.
 
 Ephemeris data line format (section 5.2.4.1):
   epoch x y z x_dot y_dot z_dot [x_ddot y_ddot z_ddot]
-  Units: km, km/s, km/s**2 per section 7.7.2.1 — NOT displayed on data lines.
+  Units: km, km/s, km/s**2 per section 7.7.2.1 - NOT displayed on data lines.
 
 Covariance data format (section 5.2.5.4):
   Lower-triangular 6×6 matrix, row by row: 1, 2, 3, 4, 5, and 6 values per row.
@@ -44,7 +44,7 @@ from ccsds_data_messages.models.oem import OEM
 if TYPE_CHECKING:
     from pathlib import Path
 
-# Block delimiter for COVARIANCE — derived from model, not hardcoded.
+# Block delimiter for COVARIANCE - derived from model, not hardcoded.
 _COVARIANCE_DELIMITER = get_delineation(OEM.Segment.CovarianceMatrix)
 
 # Covariance matrix field setup.

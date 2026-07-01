@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
+"""
+Reader/writer Protocol interfaces implemented by each format's adapter classes.
+
+``MessageReaderPort`` and ``MessageWriterPort`` define the instance-method shape
+every KVN and XML adapter (``io/kvn/*``, ``io/xml/*``) conforms to, so
+``io/registry.py`` can cache and dispatch through one uniform interface regardless
+of format or message type.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
