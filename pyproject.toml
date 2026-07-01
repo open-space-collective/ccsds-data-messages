@@ -1,0 +1,395 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ccsds-data-messages"
+version = "0.1.0"
+description = "CCSDS data messages (ODM, CDM) - read, write, and construct OPM, OMM, OEM, OCM in KVN and XML formats."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "defusedxml>=0.7.1",
+    "pydantic~=2.0",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/open-space-collective/orbit-data-messages"
+Source = "https://github.com/open-space-collective/orbit-data-messages"
+Issues = "https://github.com/open-space-collective/orbit-data-messages/issues"
+
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
+default = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ccsds_data_messages"]
+
+[tool.hatch.build.targets.wheel.shared-data]
+"src/ccsds_data_messages/py.typed" = "ccsds_data_messages/py.typed"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+addopts = "-v --cov=ccsds_data_messages --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+source = ["ccsds_data_messages"]
+branch = true
+
+[tool.coverage.report]
+# Lines matching these patterns are excluded from coverage measurement.
+# They are unreachable by design (type-checker-only imports, overload stubs,
+# abstract method bodies) — not untested code.
+# Add `# pragma: no cover` to any line you want to exclude on a case-by-case basis.
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@overload",
+    "\\.\\.\\.",
+]
+
+[tool.mypy]
+strict = true
+plugins = ["pydantic.mypy"]
+python_version = "3.11"
+mypy_path = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 90
+
+[tool.ruff.lint]
+preview = true
+select = ["ALL"]
+ignore = [
+    # Framework-specific - not used in this project
+    "AIR",     # airflow
+    "DJ",      # django
+    "EXE",     # flake8-executable
+    "FAST",    # fastapi
+    "INT",     # gettext / i18n
+    "NPY",     # numpy
+    "PD",      # pandas
+    "YTT",     # flake8-2020 sys.version checks
+
+    # Conflict with ruff formatter
+    "COM812",  # missing-trailing-comma
+    "ISC",     # implicit-str-concat
+
+    # Docstrings: enable D205 (blank line after summary), D209 (closing quotes on own
+    # line), D213 (multi-line summary on second line). Disable everything else.
+    "D1",                                    # missing-docstring variants (not enforced)
+    "D200", "D201", "D202", "D203", "D204",  # D2xx before D205 — off
+    "D206", "D207", "D208",                  # D2xx between D205 and D209 — off
+    "D210", "D211",                          # D2xx between D209 and D213 — off
+    "D212",                                  # conflicts with D213
+    "D214", "D215",                          # section indentation — off
+    "D3",                                    # quote style (ruff format handles this)
+    "D4",                                    # content / imperative mood (not enforced)
+    "DOC",                                   # pydoclint (not used)
+
+    # Copyright headers not required (open-source, no mandatory notice)
+    "CPY",
+
+    # Alignment formatting - intentional in CCSDS enum / tabular definitions
+    "E221",    # multiple-spaces-before-operator
+    "E241",    # multiple-spaces-after-comma
+
+    # Line-length linting - formatter handles what it can, rest are unavoidable
+    "E501",    # line-too-long
+
+    # Imports not at module top-level - legitimate in TYPE_CHECKING blocks
+    "PLC0415",
+
+    # Pydantic field type aliases must be importable at runtime (Pydantic uses
+    # get_type_hints() to resolve annotations); moving them to TYPE_CHECKING
+    # blocks would break model definition.
+    "TC001",
+
+    # Relative imports from parent modules - standard Python subpackage pattern
+    "TID252",
+
+    # Ambiguous Unicode characters - Greek letters are intentional in CCSDS context
+    "RUF001",
+
+    # Style preferences
+    "EM",      # flake8-errmsg (verbose error message strings)
+    "FBT",     # boolean-trap (pydantic fields often require bool parameters)
+    "TRY003",  # raise-vanilla-args
+
+    # TODOs are allowed in an in-progress library
+    "FIX",     # flake8-fixme
+    "TD",      # todo tags
+
+    # CCSDS message models are inherently large; these thresholds don't fit
+    "C90",     # mccabe complexity
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+
+    # Spec literal constants appear throughout CCSDS implementations
+    "PLR2004", # magic-value-comparison
+
+    # Covered by mypy strict; ruff ANN is redundant noise
+    "ANN",
+
+    # Abstract base class pattern used intentionally (Cockpit standard)
+    "B024",    # abstract-base-class-without-abstract-method
+
+    # CCSDS spec table names like _TABLE_6_8 are uppercase constants in functions
+    "N806",    # non-lowercase-variable-in-function
+    "RUF052",  # accessed-dummy-variable (false positive for _TABLE_X_Y refs)
+
+    # Importing private helpers from own package submodules is intentional
+    "PLC2701", # private-name-import
+
+    # Ambiguous unicode in docstrings (× is multiplication, same intent as RUF001)
+    "RUF002",
+
+    # Consistent with other PLR thresholds ignored above
+    "PLR0911", # too-many-return-statements
+
+    # Exact-sentinel float comparisons (e.g. CCSDS's -999.0 "not applicable" convention)
+    # are comparisons against a literal, never a computed value - math.isclose() would
+    # be the wrong tool here, since a tolerance could misclassify a genuine near-sentinel
+    # physical value as the sentinel.
+    "RUF069",  # floating-point-equality
+
+    # __all__ is deliberately grouped by category with a comment per group
+    # (exceptions, message types, enums, I/O functions, etc.), not alphabetized -
+    # see __init__.py, io/__init__.py, models/__init__.py.
+    "RUF022",  # unsorted-dunder-all
+
+    # Project-specific
+    "N999",    # module name (snake_case is intentional)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = [
+    "RUF067",  # __init__ may define TypeAlias re-exports, not just bare imports
+]
+"src/ccsds_data_messages/io/kvn/**" = [
+    # _parse/_write/_build never use self by design: these adapter classes exist
+    # to satisfy MessageReaderPort/MessageWriterPort (instance-method Protocols),
+    # so registry.py can cache and dispatch through a uniform interface.
+    "PLR6301", # method-could-be-function
+]
+"src/ccsds_data_messages/io/xml/**" = [
+    "PLR6301", # method-could-be-function (see io/kvn/** ignore above)
+]
+"tests/**" = [
+    "ARG001",  # unused-argument (pytest fixtures)
+    "ARG002",  # unused-method-argument
+    "DTZ001",  # datetime without tzinfo (not critical in test data)
+    "ERA001",  # commented-out-code
+    "PLR0904", # too-many-public-methods (many test_* methods per class is idiomatic pytest)
+    "PLR6301", # method-could-be-function (pytest class methods naturally omit self)
+    "PT011",   # pytest-raises-too-broad (Cockpit standard)
+    "S101",    # assert
+    "SLF001",  # private-member-access
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[dependency-groups]
+dev = [
+    "hypothesis~=6.0",
+    "mypy~=1.0",
+    "pylint~=3.0",
+    "pytest~=7.0",
+    "pytest-cov~=5.0",
+    "ruff>=0.4",
+    "types-defusedxml>=0.7.0.20260504",
+]
+
+[tool.pylint]
+ignore = ["build", ".eggs"]
+load-plugins = [
+    "pylint.extensions.code_style",
+    "pylint.extensions.dict_init_mutate",
+    "pylint.extensions.docparams",
+    "pylint.extensions.typing",
+]
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = "all"
+
+# Rules not covered by ruff (https://github.com/astral-sh/ruff/issues/970) or mypy.
+# Matches Cockpit library standard; omits loft.pylint_plugin (proprietary),
+# no-member (pydantic false-positives), and spelling checks (require word list).
+enable = [
+    # Error
+    "abstract-class-instantiated",
+    "access-member-before-definition",
+    "assignment-from-no-return",
+    "assignment-from-none",
+    "bad-except-order",
+    "bad-exception-cause",
+    "bad-reversed-sequence",
+    "catching-non-exception",
+    "class-variable-slots-conflict",
+    "dict-iter-missing-items",
+    "inconsistent-mro",
+    "inherit-non-class",
+    "invalid-character-carriage-return",
+    "invalid-class-object",
+    "invalid-enum-extension",
+    "invalid-envvar-value",
+    "invalid-format-returned",
+    "invalid-getnewargs-ex-returned",
+    "invalid-getnewargs-returned",
+    "invalid-length-hint-returned",
+    "invalid-metaclass",
+    "invalid-repr-returned",
+    "invalid-sequence-index",
+    "invalid-slice-index",
+    "invalid-slice-step",
+    "invalid-slots",
+    "invalid-slots-object",
+    "invalid-star-assignment-target",
+    "invalid-str-returned",
+    "invalid-unary-operand-type",
+    "invalid-unicode-codec",
+    "logging-format-truncated",
+    "logging-unsupported-format",
+    "method-hidden",
+    "misplaced-format-function",
+    "missing-kwoa",
+    "modified-iterating-dict",
+    "no-method-argument",
+    "no-value-for-parameter",
+    "non-iterator-returned",
+    "not-a-mapping",
+    "not-an-iterable",
+    "not-async-context-manager",
+    "not-callable",
+    "not-context-manager",
+    "raising-bad-type",
+    "raising-non-exception",
+    "redundant-keyword-arg",
+    "star-needs-assignment-target",
+    "too-many-function-args",
+    "unexpected-keyword-arg",
+    "unhashable-member",
+    "unpacking-non-sequence",
+    "unsubscriptable-object",
+    "unsupported-assignment-operation",
+    "unsupported-binary-operation",
+    "unsupported-delete-operation",
+    "unsupported-membership-test",
+    # Warning
+    "abstract-method",
+    "anomalous-unicode-escape-in-string",
+    "arguments-differ",
+    "arguments-out-of-order",
+    "arguments-renamed",
+    "attribute-defined-outside-init",
+    "bad-chained-comparison",
+    "bad-format-string-key",
+    "bad-thread-instantiation",
+    "comparison-with-callable",
+    "confusing-with-statement",
+    "deprecated-argument",
+    "deprecated-class",
+    "deprecated-decorator",
+    "deprecated-method",
+    "deprecated-module",
+    "deprecated-typing-alias",
+    "differing-param-doc",
+    "differing-type-doc",
+    "duplicate-string-formatting-argument",
+    "global-variable-undefined",
+    "invalid-format-index",
+    "invalid-overridden-method",
+    "isinstance-second-argument-not-valid-type",
+    "missing-any-param-doc",
+    "missing-format-attribute",
+    "missing-param-doc",
+    "missing-parentheses-for-call-in-test",
+    "missing-raises-doc",
+    "missing-return-type-doc",
+    "missing-timeout",
+    "missing-type-doc",
+    "missing-yield-doc",
+    "missing-yield-type-doc",
+    "modified-iterating-list",
+    "multiple-constructor-doc",
+    "non-parent-init-called",
+    "non-str-assignment-to-dunder-name",
+    "overridden-final-method",
+    "pointless-string-statement",
+    "possibly-unused-variable",
+    "preferred-module",
+    "raising-format-tuple",
+    "redeclared-assigned-name",
+    "redefined-outer-name",
+    "redefined-slots-in-subclass",
+    "redundant-returns-doc",
+    "redundant-unittest-assert",
+    "redundant-yields-doc",
+    "self-cls-assignment",
+    "shallow-copy-environ",
+    "signature-differs",
+    "subclassed-final-class",
+    "super-init-not-called",
+    "unbalanced-dict-unpacking",
+    "unbalanced-tuple-unpacking",
+    "undefined-loop-variable",
+    "unreachable",
+    "unused-private-member",
+    "unused-wildcard-import",
+    "useless-param-doc",
+    "useless-parent-delegation",
+    "useless-type-doc",
+    "using-constant-test",
+    "using-final-decorator-in-unsupported-version",
+    "wrong-exception-operation",
+    # Convention
+    "bad-file-encoding",
+    "bad-mcs-classmethod-argument",
+    "bad-mcs-method-argument",
+    "consider-using-enumerate",
+    "consider-using-f-string",
+    "dict-init-mutate",
+    "disallowed-name",
+    "invalid-characters-in-docstring",
+    "mixed-line-endings",
+    "superfluous-parens",
+    "unexpected-line-ending-format",
+    "use-maxsplit-arg",
+    # Refactor
+    "chained-comparison",
+    "condition-evals-to-constant",
+    "consider-swap-variables",
+    "consider-using-assignment-expr",
+    "consider-using-join",
+    "consider-using-namedtuple-or-dataclass",
+    "cyclic-import",
+    "simplifiable-condition",
+    "simplify-boolean-expression",
+    "stop-iteration-return",
+    "too-many-ancestors",
+    "use-yield-from",
+]
+
+[tool.pylint.FORMAT]
+max-line-length = 90

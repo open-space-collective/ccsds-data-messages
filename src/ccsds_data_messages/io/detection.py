@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
+Format/message-type detection for auto-detecting a file's KVN/XML format and OPM/OMM/OEM/OCM type.
+
 Spec references:
 - Section 7.3.5: Blank lines may be ignored.
 - Section 7.3.6: The first header line is the first non-blank line.
@@ -8,19 +10,24 @@ Spec references:
 - Section 8.2: First line of an XML file: ``<?xml version="1.0" encoding="UTF-8"?>``.
 - Section 8.3.2: XML root element tags: ``<opm>``, ``<omm>``, ``<oem>``, ``<ocm>``.
 """
+
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ccsds_data_messages.exceptions import DetectionError
-from ccsds_data_messages.io.format import MessageFormat
-from ccsds_data_messages.io.format import MessageType
+from ccsds_data_messages.io.format import MessageFormat, MessageType
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _ODM_TYPES: frozenset[str] = frozenset(MessageType)
 
-_XML_TAG_RE: re.Pattern[str] = re.compile(r"<([a-z]+)[\s>/]")               # section 8.3.2
-_KVN_VERS_RE: re.Pattern[str] = re.compile(r"CCSDS_(OEM|OMM|OPM|OCM)_VERS") # section 7.9.1
+_XML_TAG_RE: re.Pattern[str] = re.compile(r"<([a-z]+)[\s>/]")  # section 8.3.2
+_KVN_VERS_RE: re.Pattern[str] = re.compile(
+    r"CCSDS_(OEM|OMM|OPM|OCM)_VERS"
+)  # section 7.9.1
 
 _STEM_HINTS: dict[str, MessageType] = {
     "ephemeris": MessageType.OEM,
@@ -33,8 +40,7 @@ _STEM_HINTS: dict[str, MessageType] = {
 def _first_nonblank_line(path: Path) -> str:
     with path.open(encoding="utf-8", errors="replace") as file:
         for line in file:
-            stripped: str = line.strip()
-            if stripped:
+            if stripped := line.strip():
                 return stripped
     return ""
 
@@ -54,8 +60,7 @@ def _sniff_xml_type(path: Path) -> MessageType | None:
 
 
 def detect_format(path: Path) -> MessageFormat:
-    suffix: str = path.suffix.lower()
-    if suffix == ".xml":
+    if (suffix := path.suffix.lower()) == ".xml":
         return MessageFormat.XML
     if suffix[1:] in _ODM_TYPES:
         return MessageFormat.KVN
@@ -82,8 +87,7 @@ def detect_message_type(
     Raises:
         DetectionError: if the type cannot be determined.
     """
-    message_type: str = path.suffix.lower()[1:]
-    if message_type in _ODM_TYPES:
+    if (message_type := path.suffix.lower()[1:]) in _ODM_TYPES:
         return MessageType(message_type)
 
     stem: str = path.stem.lower()
@@ -91,7 +95,13 @@ def detect_message_type(
         if keyword in stem:
             return hint
 
-    sniffed: MessageType | None = _sniff_kvn_type(path) if fmt == MessageFormat.KVN else _sniff_xml_type(path) if fmt == MessageFormat.XML else None
+    sniffed: MessageType | None = (
+        _sniff_kvn_type(path)
+        if fmt == MessageFormat.KVN
+        else _sniff_xml_type(path)
+        if fmt == MessageFormat.XML
+        else None
+    )
     if sniffed is not None:
         return sniffed
 

@@ -116,6 +116,7 @@ _REF_FRAME_PARAMETRIC_RE: re.Pattern[str] = re.compile(
     r"^(?:DTRF\d{4}|GCRF\d+|ICRF\d+|ITRF\d{4}|MOON_PA\d{3})$"
 )
 
+
 class RefFrame(StrEnum):
     """
     Values for the ``REF_FRAME`` keyword.
@@ -286,14 +287,15 @@ class Interpolation(StrEnum):
     Valid values for the ``INTERPOLATION`` keyword.
 
     Defined directly in the spec body; not a SANA registry field.
-    PROPAGATE is valid for OCM only; OEM restricts to HERMITE, LAGRANGE, LINEAR
-    and enforces this via a field validator.
+    Table 5-3 (OEM) lists HERMITE, LAGRANGE, LINEAR as "Examples of Values"
+    (not a closed set); Table 6-4 (OCM) additionally lists PROPAGATE. No
+    validator rejects PROPAGATE on OEM - the spec does not state it is forbidden.
     """
 
     HERMITE = "HERMITE"
     LAGRANGE = "LAGRANGE"
     LINEAR = "LINEAR"
-    PROPAGATE = "PROPAGATE"  # OCM only
+    PROPAGATE = "PROPAGATE"
 
 
 class ManeuverBasis(StrEnum):
@@ -397,9 +399,73 @@ class OrbitCategory(StrEnum):
         validates it correctly.
         """
         if index not in {1, 2, 3, 4, 5}:
-            raise ValueError(f"Invalid Lagrange point index: {index}, should be in {{1, 2, 3, 4, 5}}")
-        name = f"{primary_attracting_body.value}_{secondary_attracting_body.value}_{index}"
+            raise ValueError(
+                f"Invalid Lagrange point index: {index}, should be in {{1, 2, 3, 4, 5}}"
+            )
+        name = (
+            f"{primary_attracting_body.value}_{secondary_attracting_body.value}_{index}"
+        )
         member: OrbitCategory = str.__new__(cls, name)
+        member._value_ = name
+        member._name_ = name
+        return member
+
+
+class ManeuverPurpose(StrEnum):
+    """
+    Valid values for the ``MAN_PURPOSE`` keyword.
+
+    Table 6-7 lists these as a free-text field that "could include" the values
+    below (not a closed set); non-standard purposes are accepted as plain
+    strings via the field's ``ManeuverPurpose | str`` type.
+    """
+
+    AEROBRAKE = "AEROBRAKE"
+    ATTITUDE = "ATTITUDE"
+    COLA = "COLA"
+    DEPLOY = "DEPLOY"
+    DESAT = "DESAT"
+    DISPOSAL = "DISPOSAL"
+    INCLINATION = "INCLINATION"
+    LEOP = "LEOP"
+    MASS_ADJUST = "MASS_ADJUST"
+    MNVR_CLEANUP = "MNVR_CLEANUP"
+    ORBIT = "ORBIT"
+    OTHER = "OTHER"
+    PERIOD = "PERIOD"
+    RELOCATION = "RELOCATION"
+    SCI_OBJ = "SCI_OBJ"
+    SK = "SK"
+    SPIN_RATE = "SPIN_RATE"
+    TRAJ_CORR = "TRAJ_CORR"
+    TRIM = "TRIM"
+
+    @classmethod
+    def grav_assist_from(cls, body: CenterName) -> ManeuverPurpose:
+        """
+        Return the maneuver purpose for a gravity assist flyby of ``body``.
+
+        Constructs a pseudo-member with value ``GRAV_ASSIST_FROM_<body>``, per
+        Table 6-7's ``GRAV_ASSIST_FROM_XXXX`` pattern (XXXX = SANA body center
+        name). The returned object is a genuine ``ManeuverPurpose`` member.
+        """
+        name = f"GRAV_ASSIST_FROM_{body.value}"
+        member: ManeuverPurpose = str.__new__(cls, name)
+        member._value_ = name
+        member._name_ = name
+        return member
+
+    @classmethod
+    def pointing_request(cls, prm_id: str) -> ManeuverPurpose:
+        """
+        Return the maneuver purpose for a Pointing Request Message ``prm_id``.
+
+        Constructs a pseudo-member with value ``PRM_ID_<prm_id>``, per Table
+        6-7's ``PRM_ID_xxxx`` pattern. The returned object is a genuine
+        ``ManeuverPurpose`` member.
+        """
+        name = f"PRM_ID_{prm_id}"
+        member: ManeuverPurpose = str.__new__(cls, name)
         member._value_ = name
         member._name_ = name
         return member
@@ -524,15 +590,29 @@ class Organization(StrEnum):
     RFSA = "RFSA"
     UKSA = "UKSA"
     CCSDS_CONTROL_AUTHORITY_AGENT = "CCSDS Control Authority Agent"
-    EUROPEAN_SPACE_AGENCY_PRIMARY_CONTROL_AUTHORITY_OFFICE = "European Space Agency Primary Control Authority Office"
-    ESA_CLUSTER_MISSION_CONTROL_AUTHORITY_OFFICE = "ESA CLUSTER Mission Control Authority Office"
+    EUROPEAN_SPACE_AGENCY_PRIMARY_CONTROL_AUTHORITY_OFFICE = (
+        "European Space Agency Primary Control Authority Office"
+    )
+    ESA_CLUSTER_MISSION_CONTROL_AUTHORITY_OFFICE = (
+        "ESA CLUSTER Mission Control Authority Office"
+    )
     ESA_EURECA = "ESA/EURECA"
-    ESA_GALILEO_SYSTEM_TEST_BED_V2_MISSION_CONTROL_AUTHORITY_OFFICE = "ESA Galileo System Test Bed V2 Mission Control Authority Office"
-    ESA_HUYGENS_MISSION_CONTROL_AUTHORITY_OFFICE = "ESA Huygens Mission Control Authority Office"
-    ESA_MARS_EXPRESS_MISSION_CONTROL_AUTHORITY_OFFICE = "ESA Mars Express Mission Control Authority Office"
+    ESA_GALILEO_SYSTEM_TEST_BED_V2_MISSION_CONTROL_AUTHORITY_OFFICE = (
+        "ESA Galileo System Test Bed V2 Mission Control Authority Office"
+    )
+    ESA_HUYGENS_MISSION_CONTROL_AUTHORITY_OFFICE = (
+        "ESA Huygens Mission Control Authority Office"
+    )
+    ESA_MARS_EXPRESS_MISSION_CONTROL_AUTHORITY_OFFICE = (
+        "ESA Mars Express Mission Control Authority Office"
+    )
     ESA_XMM_MISSION_CONTROL_AUTHORITY_OFFICE = "ESA XMM Mission Control Authority Office"
-    NASA_PRIMARY_CONTROL_AUTHORITY_OFFICE_AT_THE_NATIONAL_SPACE_SCIENCE_DATA_CENTER = "NASA Primary Control Authority Office at the National Space Science Data Center"
-    JET_PROPULSION_LABORATORY_CONTROL_AUTHORITY_OFFICE = "Jet Propulsion Laboratory Control Authority Office"
+    NASA_PRIMARY_CONTROL_AUTHORITY_OFFICE_AT_THE_NATIONAL_SPACE_SCIENCE_DATA_CENTER = (
+        "NASA Primary Control Authority Office at the National Space Science Data Center"
+    )
+    JET_PROPULSION_LABORATORY_CONTROL_AUTHORITY_OFFICE = (
+        "Jet Propulsion Laboratory Control Authority Office"
+    )
     UARS_CONTROL_AUTHORITY_OFFICE = "UARS Control Authority Office"
     BELSPO = "BELSPO"
     TSNIIMASH = "TsNIIMash"
@@ -586,7 +666,9 @@ class Organization(StrEnum):
     ARSAT_PROJECT_INVAP_S_E = "ARSAT Project INVAP S.E."
     IVIETNAM = "IVIETNAM"
     SPACE_SYSTEMS_LORAL = "Space Systems/Loral"
-    TELEBRAS_TELECOMUNICACOES_BRASILEIRAS_SA = "TELEBRAS - Telecomunicações Brasileiras SA"
+    TELEBRAS_TELECOMUNICACOES_BRASILEIRAS_SA = (
+        "TELEBRAS - Telecomunicações Brasileiras SA"
+    )
     INVAP_S_E = "INVAP S.E."
     ST_ENGINEERING_SATELLITE_SYSTEMS_PTE_LTD = "ST Engineering Satellite Systems Pte Ltd"
     IAI = "IAI"
@@ -622,7 +704,9 @@ class Organization(StrEnum):
     WORLDSPACE = "WorldSpace"
     CERN = "CERN"
     ARABSAT = "ARABSAT"
-    INSTITUTE_OF_AERO_AND_ASTRO_OF_THE_TECHNICAL_UNIVERSITY_OF_BERLIN = "Institute of Aero and Astro of the Technical University of Berlin"
+    INSTITUTE_OF_AERO_AND_ASTRO_OF_THE_TECHNICAL_UNIVERSITY_OF_BERLIN = (
+        "Institute of Aero and Astro of the Technical University of Berlin"
+    )
     AFRL = "AFRL"
     PCRF = "PCRF"
     HSCL = "HSCL"
@@ -640,7 +724,9 @@ class Organization(StrEnum):
     BRIGHT_ASCENSION = "Bright Ascension"
     SCISYS = "SCISYS"
     UNIVERSITY_OF_COLORADO = "University of Colorado"
-    ST_PETERSBURG_STATE_UNIVERSITY_OF_AEROSPACE_INSTRUMENTATION = "St. Petersburg State University of Aerospace Instrumentation"
+    ST_PETERSBURG_STATE_UNIVERSITY_OF_AEROSPACE_INSTRUMENTATION = (
+        "St. Petersburg State University of Aerospace Instrumentation"
+    )
     GOONHILLY = "Goonhilly"
     MITRE = "MITRE"
     KELTIK = "Keltik"
@@ -683,7 +769,9 @@ class Organization(StrEnum):
     AIRBUS_DEFENCE_SPACE = "Airbus Defence & Space"
     AITECH_DEFENSE_SYSTEMS_INC = "Aitech Defense Systems Inc."
     INNOFLIGHT_INC = "Innoflight Inc."
-    INSTITUT_FUR_AUTOMATION_UND_KOMMUNICATION_E_V_MAGDEBURG = "Institut für Automation und Kommunication e. V. Magdeburg"
+    INSTITUT_FUR_AUTOMATION_UND_KOMMUNICATION_E_V_MAGDEBURG = (
+        "Institut für Automation und Kommunication e. V. Magdeburg"
+    )
     SAAB_ERICSSON_SPACE_AB = "Saab Ericsson Space AB"
     ADVANCED_SPACE_LLC = "Advanced Space, LLC"
     SURREY_SATELLITE_TECHNOLOGY_LTD = "Surrey Satellite Technology Ltd"
@@ -695,20 +783,28 @@ class Organization(StrEnum):
     CPI_MALIBU = "CPI Malibu"
     HABCOM_ENGINEERING = "HABCOM Engineering"
     GDP_SPACE_SYSTEMS = "GDP Space Systems"
-    JOHNS_HOPKINS_UNIVERSITY_APPLIED_PHYSICS_LABORATORY = "Johns Hopkins University Applied Physics Laboratory"
+    JOHNS_HOPKINS_UNIVERSITY_APPLIED_PHYSICS_LABORATORY = (
+        "Johns Hopkins University Applied Physics Laboratory"
+    )
     FUJITSU_LIMITED = "Fujitsu Limited"
     XIPHOS_TECHNOLOGIES_INC = "Xiphos Technologies, Inc."
     BACK_NINE_ENGINEERING_INC = "Back Nine Engineering, Inc"
-    BEIJING_EASOARING_SOFTWARE_TECHNOLOGY_CO_LTD = "Beijing Easoaring Software Technology Co., LTD"
+    BEIJING_EASOARING_SOFTWARE_TECHNOLOGY_CO_LTD = (
+        "Beijing Easoaring Software Technology Co., LTD"
+    )
     SPACE_SOFTWARE_ITALIA_S_P_A = "Space Software Italia S.p.A."
     OMITRON_INC = "Omitron, Inc."
     SPACE_INFRASTRUCTURE_FOUNDATION_INC = "Space Infrastructure Foundation, Inc."
     RAYTHEON = "Raytheon"
-    SYSRAND_CORPORATION_SPACE_ORBITAL_DEVELOPMENT_AUTHORITY_INC = "sysRAND Corporation Space Orbital Development Authority, Inc."
+    SYSRAND_CORPORATION_SPACE_ORBITAL_DEVELOPMENT_AUTHORITY_INC = (
+        "sysRAND Corporation Space Orbital Development Authority, Inc."
+    )
     BARNHARD_ASSOCIATES_LLC = "Barnhard Associates, LLC"
     ASTRIUM_SATELLITES = "ASTRIUM Satellites"
     GE_GLOBAL_RESEARCH = "GE Global Research"
-    UNIVERSITY_OF_SHEFFIELD_SPACE_INSTRUMENTATION_GROUP = "University of Sheffield Space Instrumentation Group"
+    UNIVERSITY_OF_SHEFFIELD_SPACE_INSTRUMENTATION_GROUP = (
+        "University of Sheffield Space Instrumentation Group"
+    )
     MITSUBISHI_ELECTRIC_CORPORATION = "Mitsubishi Electric Corporation"
     SPACE_CONNEXIONS_LIMITED = "Space ConneXions Limited"
     EMS_TECHNOLOGIES_CANADA_LTD = "EMS Technologies Canada Ltd."
@@ -727,7 +823,9 @@ class Organization(StrEnum):
     INGENICOMM_INC = "Ingenicomm, Inc."
     JOTNE_EPM_TECHNOLOGY_AS = "Jotne EPM Technology AS."
     M_L_MACMEDAN_CONSULTANT = "M. L. MacMedan, Consultant"
-    JSC_NATIONAL_COMPANY_KAZAKHSTAN_GHARYSH_SAPARY = "JSC “National Company “Kazakhstan Gharysh Sapary”"
+    JSC_NATIONAL_COMPANY_KAZAKHSTAN_GHARYSH_SAPARY = (
+        "JSC “National Company “Kazakhstan Gharysh Sapary”"
+    )
     CAP_GEMINI_S_P_A = "CAP GEMINI S.p.A."
     CSP_ASSOCIATES_INC = "CSP Associates, Inc."
     QUINTRON_SYSTEMS_INC = "Quintron Systems Inc."
@@ -739,7 +837,9 @@ class Organization(StrEnum):
     SOUTHWEST_RESEARCH_INSTITUTE = "Southwest Research Institute"
     TELESAT = "Telesat"
     LJT_AND_ASSOCIATES = "LJT and Associates"
-    AMERICAN_INSTITUTE_FOR_AERONAUTICS_AND_ASTRONAUTICS_AIAA = "American Institute for Aeronautics and Astronautics (AIAA)"
+    AMERICAN_INSTITUTE_FOR_AERONAUTICS_AND_ASTRONAUTICS_AIAA = (
+        "American Institute for Aeronautics and Astronautics (AIAA)"
+    )
     ZODIAC_DATA_SYSTEM = "Zodiac Data System"
     TIS_SOLUTION_LINK_INC = "TIS Solution Link Inc."
     TELOIP_INC = "TELoIP Inc."
@@ -770,7 +870,9 @@ class Organization(StrEnum):
     HONEYWELL_TECHNOLOGIES_SOLUTIONS_INC = "Honeywell Technologies Solutions Inc."
     L3_TECHNOLOGIES_CS_W = "L3 Technologies - CS-W"
     LASER_LIGHT_COMMUNICATIONS = "Laser Light Communications"
-    COUNCIL_FOR_SCIENTIFIC_AND_INDUSTRIAL_RESEARCH = "Council for Scientific and Industrial Research"
+    COUNCIL_FOR_SCIENTIFIC_AND_INDUSTRIAL_RESEARCH = (
+        "Council for Scientific and Industrial Research"
+    )
     OAKMAN_AEROSPACE_INC = "Oakman Aerospace Inc."
     BOEING_DEFENSE_SPACE_SYSTEMS = "Boeing Defense & Space Systems"
     VISIONA = "Visiona"
@@ -872,7 +974,9 @@ class Organization(StrEnum):
     CGU = "CGU"
     TM2S = "TM2S"
     KST = "KST"
-    NATIONAL_SPACE_SCIENCE_AND_TECHNOLOGY_CENTER = "National Space Science and Technology Center"
+    NATIONAL_SPACE_SCIENCE_AND_TECHNOLOGY_CENTER = (
+        "National Space Science and Technology Center"
+    )
     AT = "AT"
     ARGOTEC_SRL = "Argotec srl"
     N3O = "N3O"
@@ -883,7 +987,9 @@ class Organization(StrEnum):
     DLR_GFR = "DLR GfR"
     BLACKVE = "BlackVe"
     AALYRIA = "Aalyria"
-    GERMAN_FEDERAL_OFFICE_FOR_INFORMATION_SECURITY = "German Federal Office for Information Security"
+    GERMAN_FEDERAL_OFFICE_FOR_INFORMATION_SECURITY = (
+        "German Federal Office for Information Security"
+    )
     AMA = "AMA"
     XIPHERA_LTD = "Xiphera LTD"
     CDS = "CDS"

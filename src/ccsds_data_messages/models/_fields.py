@@ -10,7 +10,8 @@ Provides a single canonical implementation for the two CCSDS delineation keyword
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,8 @@ class FieldMetadata:
     delineation: Delineation | None = None
     format_spec: str | None = None
     block_start: bool = False
+    order: int = 50
+    spec_default: Any = field(default=None, hash=False, compare=False)
 
     @property
     def delineation_str(self) -> str:

@@ -1,57 +1,104 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Maps ``(format, message_type)`` pairs to reader and writer adapter classes using lazy string
-references: no adapter module is imported at registry load time. Adapter classes are lazily
-imported on first request.
+Adapter registry: maps ``(format, message_type)`` pairs to reader/writer classes.
+
+Uses lazy string references, so no adapter module is imported at registry load
+time - adapter classes are lazily imported on first request.
 
 Adding a built-in adapter requires one new entry in ``_READERS`` or ``_WRITERS`` only.
 Alternatively, third-party adapters can be registered at runtime via ``register_reader()`` /
 ``register_writer()``, which accept a direct class (not a string reference).
 """
+
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING
-from typing import TypeAlias
-from typing import TypeVar
-from typing import cast
+from typing import TYPE_CHECKING, TypeAlias, TypeVar, cast
 
 from ccsds_data_messages.exceptions import UnsupportedAdapterError
-from ccsds_data_messages.io.format import MessageFormat
-from ccsds_data_messages.io.format import MessageType
-
-if TYPE_CHECKING:
-    from ccsds_data_messages.io.ports import MessageReaderPort
-    from ccsds_data_messages.io.ports import MessageWriterPort
+from ccsds_data_messages.io._utils import _normalize_fmt, _normalize_type
+from ccsds_data_messages.io.format import MessageFormat, MessageType
 
 AdapterKey: TypeAlias = tuple[str, str]
-ReaderReference: TypeAlias = str | type[MessageReaderPort]
-WriterReference: TypeAlias = str | type[MessageWriterPort]
+
+if TYPE_CHECKING:
+    from ccsds_data_messages.io.ports import MessageReaderPort, MessageWriterPort
+
+    ReaderReference: TypeAlias = str | type[MessageReaderPort]
+    WriterReference: TypeAlias = str | type[MessageWriterPort]
 
 # Registry tables: each value is a string reference to a reader or writer adapter class,
 # lazily imported on first request. Instantiated adapters are cached. Adapters are
 # stateless singletons so a single instance per (fmt, msg_type) pair is sufficient.
 _READERS: dict[AdapterKey, ReaderReference] = {
-    (MessageFormat.KVN, MessageType.OEM): "ccsds_data_messages.io.kvn.oem_reader:KVNOEMReader",
-    (MessageFormat.KVN, MessageType.OMM): "ccsds_data_messages.io.kvn.omm_reader:KVNOMMReader",
-    (MessageFormat.KVN, MessageType.OPM): "ccsds_data_messages.io.kvn.opm_reader:KVNOPMReader",
-    (MessageFormat.KVN, MessageType.OCM): "ccsds_data_messages.io.kvn.ocm_reader:KVNOCMReader",
-    (MessageFormat.XML, MessageType.OEM): "ccsds_data_messages.io.xml.oem_reader:XMLOEMReader",
-    (MessageFormat.XML, MessageType.OMM): "ccsds_data_messages.io.xml.omm_reader:XMLOMMReader",
-    (MessageFormat.XML, MessageType.OPM): "ccsds_data_messages.io.xml.opm_reader:XMLOPMReader",
-    (MessageFormat.XML, MessageType.OCM): "ccsds_data_messages.io.xml.ocm_reader:XMLOCMReader",
+    (
+        MessageFormat.KVN,
+        MessageType.OEM,
+    ): "ccsds_data_messages.io.kvn.oem_reader:KVNOEMReader",
+    (
+        MessageFormat.KVN,
+        MessageType.OMM,
+    ): "ccsds_data_messages.io.kvn.omm_reader:KVNOMMReader",
+    (
+        MessageFormat.KVN,
+        MessageType.OPM,
+    ): "ccsds_data_messages.io.kvn.opm_reader:KVNOPMReader",
+    (
+        MessageFormat.KVN,
+        MessageType.OCM,
+    ): "ccsds_data_messages.io.kvn.ocm_reader:KVNOCMReader",
+    (
+        MessageFormat.XML,
+        MessageType.OEM,
+    ): "ccsds_data_messages.io.xml.oem_reader:XMLOEMReader",
+    (
+        MessageFormat.XML,
+        MessageType.OMM,
+    ): "ccsds_data_messages.io.xml.omm_reader:XMLOMMReader",
+    (
+        MessageFormat.XML,
+        MessageType.OPM,
+    ): "ccsds_data_messages.io.xml.opm_reader:XMLOPMReader",
+    (
+        MessageFormat.XML,
+        MessageType.OCM,
+    ): "ccsds_data_messages.io.xml.ocm_reader:XMLOCMReader",
 }
 
 _WRITERS: dict[AdapterKey, WriterReference] = {
-    (MessageFormat.KVN, MessageType.OEM): "ccsds_data_messages.io.kvn.oem_writer:KVNOEMWriter",
-    (MessageFormat.KVN, MessageType.OMM): "ccsds_data_messages.io.kvn.omm_writer:KVNOMMWriter",
-    (MessageFormat.KVN, MessageType.OPM): "ccsds_data_messages.io.kvn.opm_writer:KVNOPMWriter",
-    (MessageFormat.KVN, MessageType.OCM): "ccsds_data_messages.io.kvn.ocm_writer:KVNOCMWriter",
-    (MessageFormat.XML, MessageType.OEM): "ccsds_data_messages.io.xml.oem_writer:XMLOEMWriter",
-    (MessageFormat.XML, MessageType.OMM): "ccsds_data_messages.io.xml.omm_writer:XMLOMMWriter",
-    (MessageFormat.XML, MessageType.OPM): "ccsds_data_messages.io.xml.opm_writer:XMLOPMWriter",
-    (MessageFormat.XML, MessageType.OCM): "ccsds_data_messages.io.xml.ocm_writer:XMLOCMWriter",
+    (
+        MessageFormat.KVN,
+        MessageType.OEM,
+    ): "ccsds_data_messages.io.kvn.oem_writer:KVNOEMWriter",
+    (
+        MessageFormat.KVN,
+        MessageType.OMM,
+    ): "ccsds_data_messages.io.kvn.omm_writer:KVNOMMWriter",
+    (
+        MessageFormat.KVN,
+        MessageType.OPM,
+    ): "ccsds_data_messages.io.kvn.opm_writer:KVNOPMWriter",
+    (
+        MessageFormat.KVN,
+        MessageType.OCM,
+    ): "ccsds_data_messages.io.kvn.ocm_writer:KVNOCMWriter",
+    (
+        MessageFormat.XML,
+        MessageType.OEM,
+    ): "ccsds_data_messages.io.xml.oem_writer:XMLOEMWriter",
+    (
+        MessageFormat.XML,
+        MessageType.OMM,
+    ): "ccsds_data_messages.io.xml.omm_writer:XMLOMMWriter",
+    (
+        MessageFormat.XML,
+        MessageType.OPM,
+    ): "ccsds_data_messages.io.xml.opm_writer:XMLOPMWriter",
+    (
+        MessageFormat.XML,
+        MessageType.OCM,
+    ): "ccsds_data_messages.io.xml.ocm_writer:XMLOCMWriter",
 }
 
 _reader_cache: dict[AdapterKey, MessageReaderPort] = {}
@@ -64,7 +111,7 @@ def _adapter_key(
     fmt: MessageFormat | str,
     msg_type: MessageType | str,
 ) -> AdapterKey:
-    return (str(fmt).strip().lower(), str(msg_type).strip().lower())
+    return (_normalize_fmt(fmt), _normalize_type(msg_type))
 
 
 def _instantiate(reference: str | type[T]) -> T:
@@ -72,7 +119,7 @@ def _instantiate(reference: str | type[T]) -> T:
         return reference()
     module_path, class_name = reference.rsplit(":", 1)
     module = importlib.import_module(module_path)
-    return cast(T, getattr(module, class_name)())
+    return cast("T", getattr(module, class_name)())
 
 
 def get_reader(
@@ -97,10 +144,8 @@ def get_reader(
     Raises:
         UnsupportedAdapterError: If the ``(fmt, msg_type)`` pair is not registered.
     """
-    key: AdapterKey = _adapter_key(fmt, msg_type)
-    if key not in _reader_cache:
-        reference: ReaderReference | None = _READERS.get(key)
-        if reference is None:
+    if (key := _adapter_key(fmt, msg_type)) not in _reader_cache:
+        if (reference := _READERS.get(key)) is None:
             available: str = ", ".join(f"({f!r}, {t!r})" for f, t in sorted(_READERS))
             raise UnsupportedAdapterError(
                 f"No reader registered for format={fmt!r}, message_type={msg_type!r}. "
@@ -132,10 +177,8 @@ def get_writer(
     Raises:
         UnsupportedAdapterError: If the ``(fmt, msg_type)`` pair is not registered.
     """
-    key: AdapterKey = _adapter_key(fmt, msg_type)
-    if key not in _writer_cache:
-        reference: WriterReference | None = _WRITERS.get(key)
-        if reference is None:
+    if (key := _adapter_key(fmt, msg_type)) not in _writer_cache:
+        if (reference := _WRITERS.get(key)) is None:
             available: str = ", ".join(f"({f!r}, {t!r})" for f, t in sorted(_WRITERS))
             raise UnsupportedAdapterError(
                 f"No writer registered for format={fmt!r}, message_type={msg_type!r}. "

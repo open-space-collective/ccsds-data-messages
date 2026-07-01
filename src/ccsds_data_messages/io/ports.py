@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.models import CCSDSDataMessage
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class MessageReaderPort(Protocol):
     def read(
         self,
         path: Path,
-    ) -> CCSDSDataMessage:
-        ...
+    ) -> CCSDSDataMessage: ...
 
     def read_string(
         self,
         content: str,
-    ) -> CCSDSDataMessage:
-        ...
+    ) -> CCSDSDataMessage: ...
 
 
 class MessageWriterPort(Protocol):

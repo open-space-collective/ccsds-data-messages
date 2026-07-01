@@ -3,32 +3,17 @@
 from __future__ import annotations
 
 import itertools
-from datetime import UTC
-from datetime import datetime
-from typing import Annotated
-from typing import Any
-from typing import ClassVar
+from datetime import UTC, datetime
+from typing import Annotated, Any, ClassVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from ._aliases import CCSDSDate
-from ._aliases import Comment
-from ._aliases import OptionalCCSDSDate
-from ._aliases import VersionStr
-from .message import CCSDS_MODEL_CONFIG
-from .message import CCSDSDataMessage
-from ._base import BaseHeader
-from ._base import _validate_ref_frame_epoch
-from ._epoch import _epoch_sort_key
-from ._fields import Delineation
-from ._fields import FieldMetadata
-from .values import CenterName
-from .values import Interpolation
-from .values import ManCovRefFrame
-from .values import RefFrame
-from .values import TimeSystem
+from ._aliases import CCSDSDate, Comment, OEMVersionStr, OptionalCCSDSDate
+from ._base import BaseHeader, _validate_ref_frame_epoch
+from ._epoch import _normalize_epoch
+from ._fields import Delineation, FieldMetadata
+from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
+from .values import CenterName, Interpolation, ManCovRefFrame, RefFrame, TimeSystem
 
 
 class OEM(CCSDSDataMessage, BaseModel):
@@ -66,7 +51,7 @@ class OEM(CCSDSDataMessage, BaseModel):
         """
 
         ccsds_oem_vers: Annotated[
-            VersionStr,
+            OEMVersionStr,
             Field(
                 description=(
                     "Format version in the form of 'x.y', where "
@@ -74,7 +59,7 @@ class OEM(CCSDSDataMessage, BaseModel):
                     "changes, and 'x' is incremented for major changes."
                 ),
             ),
-            FieldMetadata(keyword="CCSDS_OEM_VERS"),
+            FieldMetadata(keyword="CCSDS_OEM_VERS", order=0),
         ]
 
     class Segment(BaseModel):
@@ -276,32 +261,40 @@ class OEM(CCSDSDataMessage, BaseModel):
                 """
                 Validate useable start/stop lie within [start_time, stop_time].
 
-                (7.5.10) allows two epoch formats (calendar and DOY); _epoch_sort_key
+                (7.5.10) allows two epoch formats (calendar and DOY); _normalize_epoch
                 normalizes both to calendar format before comparison.
                 """
                 if self.useable_start_time is not None:
-                    if _epoch_sort_key(self.useable_start_time) < _epoch_sort_key(self.start_time): # noqa: E501
+                    if _normalize_epoch(self.useable_start_time) < _normalize_epoch(
+                        self.start_time
+                    ):
                         raise ValueError(
                             "useable_start_time must not be earlier than start_time."
                         )
-                    if _epoch_sort_key(self.useable_start_time) > _epoch_sort_key(self.stop_time): # noqa: E501
+                    if _normalize_epoch(self.useable_start_time) > _normalize_epoch(
+                        self.stop_time
+                    ):
                         raise ValueError(
                             "useable_start_time must not be later than stop_time."
                         )
                 if self.useable_stop_time is not None:
-                    if _epoch_sort_key(self.useable_stop_time) > _epoch_sort_key(self.stop_time): # noqa: E501
+                    if _normalize_epoch(self.useable_stop_time) > _normalize_epoch(
+                        self.stop_time
+                    ):
                         raise ValueError(
                             "useable_stop_time must not be later than stop_time."
                         )
-                    if _epoch_sort_key(self.useable_stop_time) < _epoch_sort_key(self.start_time): # noqa: E501
+                    if _normalize_epoch(self.useable_stop_time) < _normalize_epoch(
+                        self.start_time
+                    ):
                         raise ValueError(
                             "useable_stop_time must not be earlier than start_time."
                         )
                 if (
                     self.useable_start_time is not None
                     and self.useable_stop_time is not None
-                    and _epoch_sort_key(self.useable_start_time)
-                    > _epoch_sort_key(self.useable_stop_time)
+                    and _normalize_epoch(self.useable_start_time)
+                    > _normalize_epoch(self.useable_stop_time)
                 ):
                     raise ValueError(
                         "useable_start_time must not be later than useable_stop_time."
@@ -310,7 +303,7 @@ class OEM(CCSDSDataMessage, BaseModel):
 
             @model_validator(mode="after")
             def validate_start_before_stop(self) -> OEM.Segment.Metadata:
-                if _epoch_sort_key(self.start_time) >= _epoch_sort_key(self.stop_time):
+                if _normalize_epoch(self.start_time) >= _normalize_epoch(self.stop_time):
                     raise ValueError("start_time must be earlier than stop_time.")
                 return self
 
@@ -469,13 +462,17 @@ class OEM(CCSDSDataMessage, BaseModel):
                 ] = None
 
                 @model_validator(mode="after")
-                def validate_acceleration_all_or_nothing(self) -> OEM.Segment.EphemerisData.EphemerisDataLine: # noqa: E501
+                def validate_acceleration_all_or_nothing(
+                    self,
+                ) -> OEM.Segment.EphemerisData.EphemerisDataLine:
                     components: tuple[float | None, float | None, float | None] = (
                         self.x_ddot,
                         self.y_ddot,
                         self.z_ddot,
                     )
-                    present_components: list[float] = [c for c in components if c is not None]
+                    present_components: list[float] = [
+                        c for c in components if c is not None
+                    ]
                     if present_components and len(present_components) != 3:
                         raise ValueError(
                             "Acceleration components are all-or-nothing: provide all three "
@@ -498,11 +495,13 @@ class OEM(CCSDSDataMessage, BaseModel):
 
             @model_validator(mode="after")
             def validate_epochs_ordered(self) -> OEM.Segment.EphemerisData:
-                epochs: list[str] = [state_vector.epoch for state_vector in self.ephemeris_data_lines]
+                epochs: list[str] = [
+                    state_vector.epoch for state_vector in self.ephemeris_data_lines
+                ]
                 for i, (prev_epoch, current_epoch) in enumerate(
                     itertools.pairwise(epochs), start=1
                 ):
-                    if _epoch_sort_key(current_epoch) <= _epoch_sort_key(prev_epoch):
+                    if _normalize_epoch(current_epoch) <= _normalize_epoch(prev_epoch):
                         raise ValueError(
                             f"Ephemeris data line epochs must be strictly increasing. "
                             f"Found epoch[{i}]='{current_epoch}' <= epoch[{i - 1}]='{prev_epoch}'."
@@ -543,13 +542,14 @@ class OEM(CCSDSDataMessage, BaseModel):
                 ]
 
                 cov_ref_frame: Annotated[
-                    RefFrame | ManCovRefFrame | None,
+                    RefFrame | ManCovRefFrame | str | None,
                     Field(
                         default=None,
                         description=(
                             "Reference frame for this covariance matrix. "
                             "May be omitted if identical to the segment REF_FRAME. "
-                            "Accepts standard reference frames or orbit-relative RSW/RTN/TNW."
+                            "Accepts standard reference frames, orbit-relative RSW/RTN/TNW, "
+                            "or non-standard values documented in an ICD."
                         ),
                     ),
                     FieldMetadata(keyword="COV_REF_FRAME"),
@@ -802,11 +802,13 @@ class OEM(CCSDSDataMessage, BaseModel):
 
             @model_validator(mode="after")
             def validate_epochs_ordered(self) -> OEM.Segment.CovarianceMatrix:
-                epochs: list[str] = [matrix_line.epoch for matrix_line in self.covariance_matrix_lines]
+                epochs: list[str] = [
+                    matrix_line.epoch for matrix_line in self.covariance_matrix_lines
+                ]
                 for i, (prev_epoch, current_epoch) in enumerate(
                     itertools.pairwise(epochs), start=1
                 ):
-                    if _epoch_sort_key(current_epoch) <= _epoch_sort_key(prev_epoch):
+                    if _normalize_epoch(current_epoch) <= _normalize_epoch(prev_epoch):
                         raise ValueError(
                             f"Covariance matrix epochs must be strictly increasing. "
                             f"Found epoch[{i}]='{current_epoch}' <= "
@@ -829,12 +831,12 @@ class OEM(CCSDSDataMessage, BaseModel):
             """
             Validate all ephemeris epochs lie within [start_time, stop_time].
 
-            Allows calendar and DOY formats; _epoch_sort_key normalizes both.
+            Allows calendar and DOY formats; _normalize_epoch normalizes both.
             """
-            start: str = _epoch_sort_key(self.metadata.start_time)
-            stop: str = _epoch_sort_key(self.metadata.stop_time)
+            start: str = _normalize_epoch(self.metadata.start_time)
+            stop: str = _normalize_epoch(self.metadata.stop_time)
             for i, state_vector in enumerate(self.ephemeris_data.ephemeris_data_lines):
-                key: str = _epoch_sort_key(state_vector.epoch)
+                key: str = _normalize_epoch(state_vector.epoch)
                 if key < start or key > stop:
                     raise ValueError(
                         f"Ephemeris data line epoch[{i}]='{state_vector.epoch}' lies outside the "
@@ -846,15 +848,32 @@ class OEM(CCSDSDataMessage, BaseModel):
         def validate_covariance_within_time_span(self) -> OEM.Segment:
             if self.covariance_matrix is None:
                 return self
-            start: str = _epoch_sort_key(self.metadata.start_time)
-            stop: str = _epoch_sort_key(self.metadata.stop_time)
-            for i, matrix_line in enumerate(self.covariance_matrix.covariance_matrix_lines):
-                key: str = _epoch_sort_key(matrix_line.epoch)
+            start: str = _normalize_epoch(self.metadata.start_time)
+            stop: str = _normalize_epoch(self.metadata.stop_time)
+            for i, matrix_line in enumerate(
+                self.covariance_matrix.covariance_matrix_lines
+            ):
+                key: str = _normalize_epoch(matrix_line.epoch)
                 if key < start or key > stop:
                     raise ValueError(
                         f"Covariance matrix epoch[{i}]='{matrix_line.epoch}' lies outside the "
                         f"declared span [{self.metadata.start_time}, {self.metadata.stop_time}]."
                     )
+            return self
+
+        @model_validator(mode="after")
+        def validate_interpolation_record_count(self) -> OEM.Segment:
+            """§5.2.4.7: data block must contain enough records for the interpolation method."""
+            method = self.metadata.interpolation
+            degree = self.metadata.interpolation_degree
+            if method is None or method == Interpolation.PROPAGATE or degree is None:
+                return self
+            if (n_lines := len(self.ephemeris_data.ephemeris_data_lines)) < degree + 1:
+                raise ValueError(
+                    f"INTERPOLATION={method} with INTERPOLATION_DEGREE={degree} requires "
+                    f"at least {degree + 1} ephemeris data records (§5.2.4.7); "
+                    f"found {n_lines}."
+                )
             return self
 
     header: Header
@@ -880,7 +899,9 @@ class OEM(CCSDSDataMessage, BaseModel):
 
     @model_validator(mode="after")
     def validate_time_system_fixed(self) -> OEM:
-        systems: list[TimeSystem] = [seg.metadata.time_system for seg in self.segments]
+        systems: list[TimeSystem | str] = [
+            seg.metadata.time_system for seg in self.segments
+        ]
         if len(set(systems)) > 1:
             distinct: str = ", ".join(str(s) for s in dict.fromkeys(systems))
             raise ValueError(
@@ -894,30 +915,58 @@ class OEM(CCSDSDataMessage, BaseModel):
         """
         Validate useable intervals across consecutive segments do not overlap.
 
-        A shared endpoint is permitted (5.2.4.4). Only checked when both
-        consecutive segments define useable bounds.
+        A shared endpoint is permitted (5.2.4.4). Per 7.5.10, an omitted
+        USEABLE_START_TIME/USEABLE_STOP_TIME means all data is assumed valid, so
+        the check falls back to the segment's total start_time/stop_time when the
+        useable bound is not supplied.
         """
         for i, (prev_segment, curr_segment) in enumerate(
             zip(self.segments, self.segments[1:], strict=False), start=1
         ):
             prev: OEM.Segment.Metadata = prev_segment.metadata
             curr: OEM.Segment.Metadata = curr_segment.metadata
-            if (
-                prev.useable_stop_time is not None
-                and curr.useable_start_time is not None
-                and _epoch_sort_key(curr.useable_start_time)
-                < _epoch_sort_key(prev.useable_stop_time)
+            prev_effective_stop: str = (
+                prev.useable_stop_time
+                if prev.useable_stop_time is not None
+                else prev.stop_time
+            )
+            curr_effective_start: str = (
+                curr.useable_start_time
+                if curr.useable_start_time is not None
+                else curr.start_time
+            )
+            if _normalize_epoch(curr_effective_start) < _normalize_epoch(
+                prev_effective_stop
             ):
                 raise ValueError(
                     f"Useable intervals of consecutive segments must not overlap. "
-                    f"Segment {i - 1} useable stop='{prev.useable_stop_time}' > "
-                    f"segment {i} useable start='{curr.useable_start_time}'."
+                    f"Segment {i - 1} useable stop='{prev_effective_stop}' > "
+                    f"segment {i} useable start='{curr_effective_start}'."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_single_object(self) -> OEM:
+        """§5.1.3: all segments must describe the same single object."""
+        names: set[str] = {s.metadata.object_name for s in self.segments}
+        if len(names) > 1:
+            raise ValueError(
+                f"OEM shall contain orbit data for a single object (§5.1.3); "
+                f"found multiple OBJECT_NAME values: {sorted(names)}"
+            )
+        ids: set[str] = {s.metadata.object_id for s in self.segments}
+        if len(ids) > 1:
+            raise ValueError(
+                f"OEM shall contain orbit data for a single object (§5.1.3); "
+                f"found multiple OBJECT_ID values: {sorted(ids)}"
+            )
         return self
 
 
 class OEMBuilder:
     """
+    Fluent builder for OEM.
+
     Call ``header`` once, then ``add_segment`` one or more times,
     then ``build`` to validate and return a frozen ``OEM`` instance.
     """

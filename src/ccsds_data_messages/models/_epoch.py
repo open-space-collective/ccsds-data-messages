@@ -19,9 +19,7 @@ in the spec: calendar (``YYYY-MM-DDThh:mm:ss[.d+][Z]``) and day-of-year
 from __future__ import annotations
 
 import re
-from datetime import UTC
-from datetime import datetime
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from pydantic.dataclasses import dataclass
 
@@ -127,9 +125,9 @@ def validate_time_tag(v: str, field_name: str = "value") -> str:
     """
     Accept either an absolute CCSDS date or a relative time in seconds.
 
-    Absolute dates are checked first so that large decimal numbers that look like
-    Julian Dates (e.g. "2451545.0") are never silently accepted as relative times.
-    Version 3 withdrew the Julian Date format; passing one here is a hard error.
+    Check order:
+    1. Absolute CCSDS date (calendar or day-of-year) - validated for semantic range.
+    2. Relative time in seconds - signed decimal or scientific notation.
 
     Args:
         v (str): The time-tag string to validate.
@@ -150,8 +148,7 @@ def validate_time_tag(v: str, field_name: str = "value") -> str:
     raise ValueError(
         f"{field_name} must be a CCSDS absolute date "
         f"(YYYY-MM-DDThh:mm:ss[Z] or YYYY-DOYThh:mm:ss[Z]) "
-        f"or a relative time in seconds (e.g. 20157.26). "
-        f"Julian Date format is not supported (ODMV3 §7.5.10)."
+        f"or a relative time in seconds (e.g. 20157.26)."
     )
 
 
@@ -202,10 +199,9 @@ def _parse_ccsds_epoch(epoch: str) -> datetime:
         time_part: str
         date_part, time_part = normalized.split("T", 1)
         year: int = int(date_part[:4])
-        doy: int = int(date_part[5:8])
         # timedelta arithmetic raises ValueError for doy > 365/366 implicitly
-        # because the resulting datetime would be in the next year — detect it:
-        if doy < 1:
+        # because the resulting datetime would be in the next year - detect it:
+        if (doy := int(date_part[5:8])) < 1:
             raise ValueError(f"Day-of-year must be ≥ 1, got {doy}")
         base_date: datetime = datetime(year, 1, 1, tzinfo=UTC) + timedelta(days=doy - 1)
         if base_date.year != year:
@@ -230,7 +226,9 @@ def _parse_ccsds_epoch(epoch: str) -> datetime:
             tzinfo=UTC,
         )
 
-    # Calendar: Python 3.11+ fromisoformat handles any sub-second precision.
+    # Calendar: Python datetime is limited to microsecond precision (6 decimal
+    # places). fromisoformat accepts spec-valid epochs with up to 16 fractional
+    # digits (§7.5.10) but silently truncates beyond microseconds.
     # fromisoformat raises ValueError for out-of-range month/day.
     return datetime.fromisoformat(normalized).replace(tzinfo=UTC)
 

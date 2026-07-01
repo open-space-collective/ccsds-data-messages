@@ -1,14 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Abstract base class for all CCSDS data messages.
+Shared foundation for all CCSDS data message types.
+
+``CCSDS_MODEL_CONFIG`` is the Pydantic ``ConfigDict`` every OEM/OMM/OPM/OCM class
+and nested block applies (frozen, unknown-field-rejecting, enum-coercing).
+``CCSDSDataMessage`` is the abstract base each top-level message type subclasses,
+blocking direct instantiation of the base itself.
 """
 
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any
-from typing import Self
+from typing import Any, Self
 
 from pydantic import ConfigDict
 
@@ -39,18 +43,16 @@ class CCSDSDataMessage(ABC):
         TypeError: If instantiated directly (i.e. ``CCSDSDataMessage()``).
     """
 
-    def __new__(
-        cls: type[Self],
-        *args: Any,
-        **kwargs: Any
-    ) -> Self:  # noqa: ARG004
+    def __new__(cls: type[Self], *args: Any, **kwargs: Any) -> Self:
         """
         Create a new instance, blocking direct instantiation of the abstract base.
 
         Args:
             cls (type[Self]): The class being instantiated.
-            *args (Any): Positional arguments forwarded to ``super().__new__``.
-            **kwargs (Any): Keyword arguments forwarded to ``super().__new__``.
+            *args (Any): Accepted but not forwarded - Pydantic's ``__init__`` (called
+                separately by the metaclass) receives them; forwarding here would break
+                ``object.__new__``, which takes no extra arguments.
+            **kwargs (Any): Same as ``*args`` - accepted but not forwarded.
 
         Returns:
             Self: A new instance of the concrete subclass.

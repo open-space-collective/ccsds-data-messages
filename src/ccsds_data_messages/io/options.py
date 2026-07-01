@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -100,4 +99,28 @@ class WriterOptions:
 
         # Suppress sign-column alignment on a field:
         WriterOptions(float_formats={"X": ".3f"})
+    """
+
+    suppress_defaults: bool = False
+    """
+    Omit fields whose value equals the Pydantic model field default.
+
+    When ``True``, keyword lines whose runtime value matches the field's declared
+    Python default are not emitted. This produces output that matches CCSDS spec
+    examples, which conventionally omit keyword lines whose value is the
+    spec-defined default (e.g. ``TIME_SYSTEM = UTC``, ``DC_TYPE = CONTINUOUS``).
+
+    A field is suppressed when either (a) it was not in the set of fields
+    explicitly provided at construction time (``model.model_fields_set``), or
+    (b) its value equals the CCSDS spec-defined default declared via
+    ``FieldMetadata(spec_default=...)`` — not the Pydantic field default.
+
+    Note: (a) has no observable effect today. Every optional field's Pydantic
+    default is ``None``, and ``None``-valued fields are already omitted from
+    output regardless of this option, so a field can only reach (a) with a
+    non-``None`` value if some future field is given a non-``None`` Python
+    default. In the current schemas, only (b) suppresses anything.
+
+    Default ``False``: all non-None fields are emitted. The OCM KVN and XML
+    writers set this to ``True`` when the caller passes no explicit options.
     """

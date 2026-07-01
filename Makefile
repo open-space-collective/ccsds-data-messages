@@ -66,7 +66,7 @@ format-check: ## Check formatting without applying changes
 	uv run ruff format --check .
 
 typecheck: ## Type-check with mypy
-	uv run mypy ccsds_data_messages
+	uv run mypy -p ccsds_data_messages
 
 pylint: ## Lint with pylint
 	uv run pylint ccsds_data_messages

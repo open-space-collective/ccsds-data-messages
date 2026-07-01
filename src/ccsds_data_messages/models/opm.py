@@ -2,33 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import UTC
-from datetime import datetime
-from typing import Annotated
-from typing import ClassVar
-from typing import Any
+from datetime import UTC, datetime
+from typing import Annotated, Any, ClassVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import field_validator
-from pydantic import model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from ._aliases import CCSDSDate
-from ._aliases import Comment
-from ._aliases import NegativeMass
-from ._aliases import OptionalCCSDSDate
-from ._aliases import VersionStr
-from .message import CCSDS_MODEL_CONFIG
-from .message import CCSDSDataMessage
-from ._base import BaseCovarianceMatrix
-from ._base import BaseHeader
-from ._base import BaseMetadata
-from ._base import BaseSpacecraftParameters
+from ._aliases import CCSDSDate, Comment, NegativeMass, OPMVersionStr, OptionalCCSDSDate
+from ._base import (
+    BaseCovarianceMatrix,
+    BaseHeader,
+    BaseMetadata,
+    BaseSpacecraftParameters,
+)
 from ._fields import FieldMetadata
-from .values import CenterName
-from .values import ManCovRefFrame
-from .values import RefFrame
-from .values import TimeSystem
+from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
+from .values import CenterName, ManCovRefFrame, RefFrame, TimeSystem
 
 # Bodies for which a standard gravitational parameter is published by IAU/JPL and
 # therefore GM need not appear in the message.
@@ -73,7 +61,7 @@ class OPM(CCSDSDataMessage, BaseModel):
         """
 
         ccsds_opm_vers: Annotated[
-            VersionStr,
+            OPMVersionStr,
             Field(
                 description=(
                     "Format version in the form of 'x.y', where "
@@ -385,8 +373,7 @@ class OPM(CCSDSDataMessage, BaseModel):
                     default=None,
                     ge=0,
                     description=(
-                        "Maneuver duration. [s] "
-                        "Set to 0 for an impulsive maneuver."
+                        "Maneuver duration. [s] Set to 0 for an impulsive maneuver."
                     ),
                 ),
                 FieldMetadata(
@@ -464,13 +451,18 @@ class OPM(CCSDSDataMessage, BaseModel):
                 import warnings
 
                 _normative = {f.value for f in ManCovRefFrame}
-                if self.man_ref_frame is not None and str(self.man_ref_frame) not in _normative:
-                    warnings.warn(
+                if (
+                    self.man_ref_frame is not None
+                    and str(self.man_ref_frame) not in _normative
+                ):
+                    # No stacklevel: this validator runs deep inside Pydantic's own
+                    # construction machinery, so no fixed stacklevel reaches the
+                    # caller that actually constructed the OPM.
+                    warnings.warn(  # noqa: B028
                         f"MAN_REF_FRAME {self.man_ref_frame!r} is outside the normative "
                         "set {RSW, RTN, TNW}. This value is accepted "
                         "in practice but may not be supported by all implementations.",
                         UserWarning,
-                        stacklevel=2,
                     )
                 return self
 
@@ -515,8 +507,7 @@ class OPM(CCSDSDataMessage, BaseModel):
         spacecraft_parameters: SpacecraftParameters | None = Field(
             default=None,
             description=(
-                "Spacecraft parameters. mass is mandatory if any maneuver "
-                "is defined."
+                "Spacecraft parameters. mass is mandatory if any maneuver is defined."
             ),
         )
 
@@ -554,8 +545,7 @@ class OPM(CCSDSDataMessage, BaseModel):
             )
             if not mass_provided:
                 raise ValueError(
-                    "spacecraft_parameters.mass is required when any maneuver "
-                    "is defined."
+                    "spacecraft_parameters.mass is required when any maneuver is defined."
                 )
             return self
 
@@ -566,13 +556,16 @@ class OPM(CCSDSDataMessage, BaseModel):
     @model_validator(mode="after")
     def validate_gm_required(self) -> OPM:
         kep = self.data.osculating_keplerian_elements
-        if kep is not None and kep.gm is None:
-            if self.metadata.center_name not in _KNOWN_GM_CENTERS:
-                raise ValueError(
-                    f"GM is required when CENTER_NAME={self.metadata.center_name!r} "
-                    "does not have a standard gravitational parameter "
-                    "and GM is not provided."
-                )
+        if (
+            kep is not None
+            and kep.gm is None
+            and self.metadata.center_name not in _KNOWN_GM_CENTERS
+        ):
+            raise ValueError(
+                f"GM is required when CENTER_NAME={self.metadata.center_name!r} "
+                "does not have a standard gravitational parameter "
+                "and GM is not provided."
+            )
         return self
 
     @classmethod
@@ -587,13 +580,13 @@ class OPMBuilder:
     """Builder for OPM. Call OPM.builder() to get one."""
 
     def __init__(self) -> None:
-        self._header_kwargs: dict = {}
-        self._metadata_kwargs: dict = {}
-        self._sv_kwargs: dict | None = None
-        self._ke_kwargs: dict | None = None
-        self._sp_kwargs: dict | None = None
-        self._cov_kwargs: dict | None = None
-        self._maneuvers: list[dict] = []
+        self._header_kwargs: dict[str, Any] = {}
+        self._metadata_kwargs: dict[str, Any] = {}
+        self._sv_kwargs: dict[str, Any] | None = None
+        self._ke_kwargs: dict[str, Any] | None = None
+        self._sp_kwargs: dict[str, Any] | None = None
+        self._cov_kwargs: dict[str, Any] | None = None
+        self._maneuvers: list[dict[str, Any]] = []
         self._user_defined: dict[str, str] | None = None
 
     def header(
@@ -663,18 +656,56 @@ class OPMBuilder:
         return self
 
     def keplerian_elements(self, **kwargs: Any) -> OPMBuilder:
+        """
+        Set optional osculating Keplerian elements.
+
+        Pass keyword arguments matching ``OPM.Data.OsculatingKeplerianElements`` fields.
+        If provided, all fields except ``true_anomaly``/``mean_anomaly`` are required;
+        exactly one of ``true_anomaly`` or ``mean_anomaly`` must be given.
+
+        Returns:
+            OPMBuilder
+        """
         self._ke_kwargs = kwargs
         return self
 
     def spacecraft_parameters(self, **kwargs: Any) -> OPMBuilder:
+        """
+        Set optional spacecraft parameters.
+
+        Pass keyword arguments matching ``OPM.Data.SpacecraftParameters`` fields.
+        ``mass`` becomes mandatory when a maneuver is also present.
+
+        Returns:
+            OPMBuilder
+        """
         self._sp_kwargs = kwargs
         return self
 
     def covariance_matrix(self, **kwargs: Any) -> OPMBuilder:
+        """
+        Set optional 6-by-6 covariance matrix.
+
+        Pass keyword arguments matching ``OPM.Data.CovarianceMatrix`` fields.
+        All-or-nothing: if provided, every lower-triangular element is required.
+
+        Returns:
+            OPMBuilder
+        """
         self._cov_kwargs = kwargs
         return self
 
     def add_maneuver(self, **kwargs: Any) -> OPMBuilder:
+        """
+        Append one maneuver parameter set.
+
+        Pass keyword arguments matching ``OPM.Data.ManeuverParameters`` fields; all
+        are optional. If any maneuver is present, ``spacecraft_parameters(mass=...)``
+        must also be set.
+
+        Returns:
+            OPMBuilder
+        """
         self._maneuvers.append(kwargs)
         return self
 

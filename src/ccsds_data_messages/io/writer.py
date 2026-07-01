@@ -5,18 +5,22 @@ Serialize ``CCSDSDataMessage`` to files or in-memory strings.
 
 Format is inferred from the file extension when ``fmt`` is omitted.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 from ccsds_data_messages.exceptions import UnsupportedAdapterError
-from ccsds_data_messages.io.format import MessageFormat
-from ccsds_data_messages.io.format import MessageType  # noqa: F401 (re-exported)
+from ccsds_data_messages.io._utils import _normalize_fmt
+from ccsds_data_messages.io.format import (
+    MessageFormat,
+    MessageType,
+)
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.io.registry import get_writer
 from ccsds_data_messages.models import CCSDSDataMessage
-from ccsds_data_messages.models.oem import OEM
 from ccsds_data_messages.models.ocm import OCM
+from ccsds_data_messages.models.oem import OEM
 from ccsds_data_messages.models.omm import OMM
 from ccsds_data_messages.models.opm import OPM
 
@@ -42,7 +46,7 @@ def _message_type(message: CCSDSDataMessage) -> str:
 
 def _infer_fmt(path: Path, fmt: MessageFormat | str | None) -> str:
     if fmt is not None:
-        return str(fmt).strip().lower()
+        return _normalize_fmt(fmt)
     return MessageFormat.XML if path.suffix.lower() == ".xml" else MessageFormat.KVN
 
 
@@ -65,8 +69,8 @@ def write(
         options (WriterOptions | None): The formatting options. ``WriterOptions()`` defaults apply when omitted.
 
     Raises:
-        TypeError: If the concrete type of ``message`` is not a recognized CCSDS message class.
-        UnsupportedAdapterError: If the ``(fmt, message_type)`` pair is not registered.
+        UnsupportedAdapterError: If the concrete type of ``message`` is not a recognized
+            CCSDS message class, or if the ``(fmt, message_type)`` pair is not registered.
 
     Example:
         >>> write(msg, "output.oem")
@@ -94,8 +98,12 @@ def write_string(
         fmt (MessageFormat | str): The output format (``MessageFormat.KVN`` or
             ``MessageFormat.XML``).
         options (WriterOptions | None): The formatting options. ``WriterOptions()`` defaults apply when omitted.
+
+    Raises:
+        UnsupportedAdapterError: If the concrete type of ``message`` is not a recognized
+            CCSDS message class, or if the ``(fmt, message_type)`` pair is not registered.
     """
-    resolved_fmt: str = str(fmt).strip().lower()
+    resolved_fmt: str = _normalize_fmt(fmt)
     return get_writer(resolved_fmt, _message_type(message)).write_string(
         message,
         options=options,
@@ -119,7 +127,9 @@ def write_oem(
         options (WriterOptions | None): The formatting options. ``WriterOptions()`` defaults apply when omitted.
     """
     path: Path = Path(destination)
-    get_writer(_infer_fmt(path, fmt), MessageType.OEM).write(message, path, options=options)
+    get_writer(_infer_fmt(path, fmt), MessageType.OEM).write(
+        message, path, options=options
+    )
 
 
 def write_opm(
@@ -139,7 +149,9 @@ def write_opm(
         options (WriterOptions | None): The formatting options. ``WriterOptions()`` defaults apply when omitted.
     """
     path: Path = Path(destination)
-    get_writer(_infer_fmt(path, fmt), MessageType.OPM).write(message, path, options=options)
+    get_writer(_infer_fmt(path, fmt), MessageType.OPM).write(
+        message, path, options=options
+    )
 
 
 def write_omm(
@@ -159,7 +171,9 @@ def write_omm(
         options (WriterOptions | None): The formatting options. ``WriterOptions()`` defaults apply when omitted.
     """
     path: Path = Path(destination)
-    get_writer(_infer_fmt(path, fmt), MessageType.OMM).write(message, path, options=options)
+    get_writer(_infer_fmt(path, fmt), MessageType.OMM).write(
+        message, path, options=options
+    )
 
 
 def write_ocm(
@@ -179,4 +193,6 @@ def write_ocm(
         options (WriterOptions | None): The formatting options. ``WriterOptions()`` defaults apply when omitted.
     """
     path: Path = Path(destination)
-    get_writer(_infer_fmt(path, fmt), MessageType.OCM).write(message, path, options=options)
+    get_writer(_infer_fmt(path, fmt), MessageType.OCM).write(
+        message, path, options=options
+    )

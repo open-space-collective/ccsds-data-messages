@@ -36,11 +36,13 @@ from ._fields import FieldMetadata
 from ._validators import (
     _validate_comment,
     _validate_negative_mass,
+    _validate_oem_version,
+    _validate_omm_version,
+    _validate_opm_version,
     _validate_optional_ccsds_date,
     _validate_optional_time_tag,
     _validate_version_format,
 )
-
 
 Comment = Annotated[
     list[str] | None,
@@ -71,7 +73,10 @@ CreationDate = Annotated[
 # Partial aliases: type + validator only; keyword and description stay inline.
 # Example: field: Annotated[CcsdsDate, Field(...), FieldMetadata(keyword="FOO")]
 
-VersionStr = Annotated[str, AfterValidator(_validate_version_format)]
+VersionStr = Annotated[str, AfterValidator(_validate_version_format)]  # OCM only: 3.x
+OPMVersionStr = Annotated[str, AfterValidator(_validate_opm_version)]  # {1.0, 2.0, 3.0}
+OMMVersionStr = Annotated[str, AfterValidator(_validate_omm_version)]  # {2.0, 3.0}
+OEMVersionStr = Annotated[str, AfterValidator(_validate_oem_version)]  # {1.0, 2.0, 3.0}
 
 CCSDSDate = Annotated[str, AfterValidator(validate_ccsds_date)]
 

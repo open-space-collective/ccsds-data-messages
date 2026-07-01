@@ -2,30 +2,22 @@
 
 from __future__ import annotations
 
-from datetime import UTC
-from datetime import datetime
-from typing import Annotated
-from typing import Any
-from typing import ClassVar
+from datetime import UTC, datetime
+from typing import Annotated, Any, ClassVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from ._aliases import CCSDSDate
-from ._aliases import Comment
-from ._aliases import VersionStr
-from .message import CCSDS_MODEL_CONFIG
-from .message import CCSDSDataMessage
-from ._base import BaseCovarianceMatrix
-from ._base import BaseHeader
-from ._base import BaseMetadata
-from ._base import BaseSpacecraftParameters
+from ._aliases import CCSDSDate, Comment, OMMVersionStr
+from ._base import (
+    BaseCovarianceMatrix,
+    BaseHeader,
+    BaseMetadata,
+    BaseSpacecraftParameters,
+)
 from ._fields import FieldMetadata
-from .values import CenterName
-from .values import MeanElementTheory
-from .values import RefFrame
-from .values import TimeSystem
+from ._validators import _validate_un_oosa_designator
+from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
+from .values import CenterName, MeanElementTheory, RefFrame, TimeSystem
 
 # Frames whose epoch is intrinsic to the frame definition.
 # TEME is included here because for OMMs it is always "TEME of Date"
@@ -83,7 +75,7 @@ class OMM(CCSDSDataMessage, BaseModel):
         """
 
         ccsds_omm_vers: Annotated[
-            VersionStr,
+            OMMVersionStr,
             Field(
                 description=(
                     "Format version in the form of 'x.y', where "
@@ -91,7 +83,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                     "changes, and 'x' is incremented for major changes."
                 ),
             ),
-            FieldMetadata(keyword="CCSDS_OMM_VERS"),
+            FieldMetadata(keyword="CCSDS_OMM_VERS", order=0),
         ]
 
     class Metadata(BaseMetadata):
@@ -143,9 +135,29 @@ class OMM(CCSDSDataMessage, BaseModel):
                         "REF_FRAME=TEME is only valid for Earth-centered OMMs."
                     )
                 if self.time_system != TimeSystem.UTC:
+                    raise ValueError("TIME_SYSTEM must be UTC for TEME-based OMMs.")
+            return self
+
+        @model_validator(mode="after")
+        def validate_tle_theory_requires_teme(self) -> OMM.Metadata:
+            """§4.2.4.6: SGP/SGP4 theories require REF_FRAME=TEME, CENTER_NAME=EARTH, TIME_SYSTEM=UTC, and a UN OOSA designator-format OBJECT_ID."""
+            if self.mean_element_theory in _MEAN_ELEMENT_THEORY_REQUIRING_TLE:
+                if self.ref_frame != RefFrame.TEME:
                     raise ValueError(
-                        "TIME_SYSTEM must be UTC for TEME-based OMMs."
+                        f"MEAN_ELEMENT_THEORY={self.mean_element_theory} requires REF_FRAME=TEME "
+                        f"(§4.2.4.6); got REF_FRAME={self.ref_frame}."
                     )
+                if self.center_name != CenterName.EARTH:
+                    raise ValueError(
+                        f"MEAN_ELEMENT_THEORY={self.mean_element_theory} requires CENTER_NAME=EARTH "
+                        f"(§4.2.4.6); got CENTER_NAME={self.center_name}."
+                    )
+                if self.time_system != TimeSystem.UTC:
+                    raise ValueError(
+                        f"MEAN_ELEMENT_THEORY={self.mean_element_theory} requires TIME_SYSTEM=UTC "
+                        f"(§4.2.4.6); got TIME_SYSTEM={self.time_system}."
+                    )
+                _validate_un_oosa_designator(self.object_id)
             return self
 
     class Data(BaseModel):
@@ -325,7 +337,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                         "6=Special Perturbations."
                     ),
                 ),
-                FieldMetadata(keyword="EPHEMERIS_TYPE"),
+                FieldMetadata(keyword="EPHEMERIS_TYPE", spec_default=0),
             ] = None
 
             classification_type: Annotated[
@@ -337,7 +349,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                         "Common values: U=unclassified, S=secret."
                     ),
                 ),
-                FieldMetadata(keyword="CLASSIFICATION_TYPE"),
+                FieldMetadata(keyword="CLASSIFICATION_TYPE", spec_default="U"),
             ] = None
 
             norad_cat_id: Annotated[
@@ -521,8 +533,7 @@ class OMM(CCSDSDataMessage, BaseModel):
         tle_related_parameters: TLERelatedParameters | None = Field(
             default=None,
             description=(
-                "TLE-related parameters. Required when "
-                "MEAN_ELEMENT_THEORY=SGP or SGP4."
+                "TLE-related parameters. Required when MEAN_ELEMENT_THEORY=SGP or SGP4."
             ),
         )
 
@@ -576,7 +587,9 @@ class OMM(CCSDSDataMessage, BaseModel):
             ValueError: If ``mean_element_theory`` is ``SGP`` or ``SGP4`` and
                 ``norad_cat_id`` is absent from ``tle_related_parameters``.
         """
-        if (theory := self.metadata.mean_element_theory) in _MEAN_ELEMENT_THEORY_REQUIRING_TLE:
+        if (
+            theory := self.metadata.mean_element_theory
+        ) in _MEAN_ELEMENT_THEORY_REQUIRING_TLE:
             tle: OMM.Data.TLERelatedParameters | None = self.data.tle_related_parameters
             if tle is None or tle.norad_cat_id is None:
                 raise ValueError(
@@ -621,6 +634,15 @@ class OMM(CCSDSDataMessage, BaseModel):
         """
         theory: MeanElementTheory | str = self.metadata.mean_element_theory
         if (tle := self.data.tle_related_parameters) is None:
+            if theory == MeanElementTheory.SGP4_XP:
+                # Table 4-3: BTERM/AGOM are Conditional ("required for SGP4 and
+                # SGP4-XP mean element models") and have no home outside this
+                # block, even though the block's own section heading is only
+                # unconditionally mandatory for SGP/SGP4.
+                raise ValueError(
+                    "tle_related_parameters (with bterm and agom) is required when "
+                    "mean_element_theory='SGP4-XP'."
+                )
             return self
 
         if theory == MeanElementTheory.SGP4 and tle.bstar is None:
@@ -717,6 +739,8 @@ class OMM(CCSDSDataMessage, BaseModel):
 
 class OMMBuilder:
     """
+    Fluent builder for OMM.
+
     Call ``header`` once, then ``metadata`` once, then ``data`` once,
     then ``build`` to validate and return a frozen ``OMM`` instance.
     """

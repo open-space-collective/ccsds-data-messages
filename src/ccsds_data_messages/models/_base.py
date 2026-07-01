@@ -24,49 +24,50 @@ Consolidates the common building blocks used across CCSDS data messages:
 
 from __future__ import annotations
 
-from typing import Annotated
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
-from pydantic import BaseModel
-from pydantic import Field
-from pydantic import model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from ._aliases import Comment
-from ._aliases import CreationDate
-from ._aliases import OptionalCcsdsDate
+from ._aliases import Comment, CreationDate, OptionalCCSDSDate
 from ._fields import FieldMetadata
 from .message import CCSDS_MODEL_CONFIG
-from .values import CenterName
-from .values import ManCovRefFrame
-from .values import Organization
-from .values import RefFrame
-from .values import TimeSystem
+from .values import CenterName, ManCovRefFrame, Organization, RefFrame, TimeSystem
 
-
-# Reference frames for which the REF_FRAME_EPOCH metadata keyword is not required 
+# Reference frames for which the REF_FRAME_EPOCH metadata keyword is not required
 # per the CCSDS specification.
 #
 # "Epoch-intrinsic" means the frame's reference epoch is either hardcoded directly
 # into its name/definition, or it matches the data state epoch by convention:
 #   - TEME: "True Equator Mean Equinox of Date," evaluated at the state epoch.
-#   - TOD:  "True of Date," the equator and equinox match the state epoch, 
+#   - TOD:  "True of Date," the equator and equinox match the state epoch,
 #           obviating the need for a separate epoch pointer (per IERS conventions).
-#   - TDR:  "True of Date, Rotating," follows the same "of date" temporal 
+#   - TDR:  "True of Date, Rotating," follows the same "of date" temporal
 #           semantics as TOD.
-#   - ITRF realizations (1993, 1997, 2000): The geodetic measurement epoch is built 
+#   - ITRF realizations (1993, 1997, 2000): The geodetic measurement epoch is built
 #     directly into the realization name (e.g. ITRF1997, ITRF2000).
-#   - MCI:  Mars-Centric Inertial, a single-body inertial frame whose pole 
+#   - MCI:  Mars-Centric Inertial, a single-body inertial frame whose pole
 #           orientation is defined by the IAU planetary model, not an external epoch.
+#   - B1950: Besselian epoch 1950.0 is hardcoded into the frame's definition.
+#   - J2000: Julian epoch J2000.0 (JD 2451545.0 TDB) is hardcoded into the frame's
+#            definition.
+#   - WGS84: Earth-fixed geodetic datum; same "realization name carries the epoch"
+#            reasoning as the ITRF entries above.
 #
-# NOTE on OPM: The Orbit Parameter Message (OPM) parser rejects TEME via a field 
-# validator before this set is evaluated; its inclusion here ensures complete 
+# NOTE on OPM: The Orbit Parameter Message (OPM) parser rejects TEME via a field
+# validator before this set is evaluated; its inclusion here ensures complete
 # compliance across other ODM types (e.g., OMM).
 #
-# NOTE on GRC: Greenwich Rotation Coordinate is excluded because it rotates with 
-# Greenwich Apparent Sidereal Time and depends on Earth Orientation Parameters (EOP). 
+# NOTE on GRC: Greenwich Rotation Coordinate is excluded because it rotates with
+# Greenwich Apparent Sidereal Time and depends on Earth Orientation Parameters (EOP).
 # It requires a REF_FRAME_EPOCH to lock the specific EOP table realization.
+#
+# NOTE on TEMEOFEPOCH: excluded, not included by oversight. Per the SANA registry,
+# TEMEOFEPOCH is "Earth's TEMEOfDate frame evaluated at some specified epoch" - i.e.
+# it requires an externally-supplied REF_FRAME_EPOCH to say *which* epoch, the
+# opposite of epoch-intrinsic.
 _EPOCH_INTRINSIC_FRAMES: frozenset[RefFrame] = frozenset(
     {
+        RefFrame.B1950,
         RefFrame.EME2000,
         RefFrame.GCRF,
         RefFrame.ICRF,
@@ -74,17 +75,19 @@ _EPOCH_INTRINSIC_FRAMES: frozenset[RefFrame] = frozenset(
         RefFrame.ITRF2000,
         RefFrame.ITRF_93,
         RefFrame.ITRF_97,
+        RefFrame.J2000,
         RefFrame.MCI,
         RefFrame.TDR,
         RefFrame.TEME,
         RefFrame.TOD,
+        RefFrame.WGS84,
     }
 )
 
 
 def _validate_ref_frame_epoch(
     ref_frame: RefFrame | str | None,
-    ref_frame_epoch: OptionalCcsdsDate,
+    ref_frame_epoch: OptionalCCSDSDate,
 ) -> None:
     """
     Assert that REF_FRAME_EPOCH is present whenever the frame is not epoch-intrinsic.
@@ -95,7 +98,7 @@ def _validate_ref_frame_epoch(
 
     Args:
         ref_frame (RefFrame | str | None): The REF_FRAME value from the metadata block.
-        ref_frame_epoch (OptionalCcsdsDate): The REF_FRAME_EPOCH value, or None if absent.
+        ref_frame_epoch (OptionalCCSDSDate): The REF_FRAME_EPOCH value, or None if absent.
 
     Raises:
         ValueError: If ``ref_frame`` is not in ``_EPOCH_INTRINSIC_FRAMES`` and
@@ -168,8 +171,8 @@ class BaseMetadata(BaseModel):
     """
     Shared metadata fields for OPM and OMM.
 
-    Both message types describe the same object identification, reference frame, and 
-    time system fields with identical types and validation rules. Subclasses add their 
+    Both message types describe the same object identification, reference frame, and
+    time system fields with identical types and validation rules. Subclasses add their
     message-specific fields and TEME-handling validators.
     """
 
@@ -234,7 +237,7 @@ class BaseMetadata(BaseModel):
     ]
 
     ref_frame_epoch: Annotated[
-        OptionalCcsdsDate,
+        OptionalCCSDSDate,
         Field(
             default=None,
             description=(
@@ -598,9 +601,7 @@ class BaseSpacecraftParameters(BaseModel):
     solar_rad_area: Annotated[
         float | None,
         Field(
-            default=None,
-            ge=0,
-            description="Solar radiation pressure area (AR) [m**2]."
+            default=None, ge=0, description="Solar radiation pressure area (AR) [m**2]."
         ),
         FieldMetadata(
             keyword="SOLAR_RAD_AREA",
