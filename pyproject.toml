@@ -9,6 +9,18 @@ description = "CCSDS data messages (ODM, CDM) - read, write, and construct OPM, 
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
+keywords = [
+    "ccsds",
+    "orbit",
+    "odm",
+    "ephemeris",
+    "kvn",
+    "xml",
+    "opm",
+    "omm",
+    "oem",
+    "ocm",
+]
 dependencies = [
     "defusedxml>=0.7.1",
     "pydantic~=2.0",
@@ -56,7 +68,7 @@ branch = true
 [tool.coverage.report]
 # Lines matching these patterns are excluded from coverage measurement.
 # They are unreachable by design (type-checker-only imports, overload stubs,
-# abstract method bodies) — not untested code.
+# abstract method bodies) - not untested code.
 # Add `# pragma: no cover` to any line you want to exclude on a case-by-case basis.
 exclude_lines = [
     "pragma: no cover",
@@ -74,6 +86,7 @@ mypy_path = ["src"]
 [tool.ruff]
 target-version = "py311"
 line-length = 90
+extend-exclude = [".archive"]  # archived pre-refactor snapshot, not part of the package
 
 [tool.ruff.lint]
 preview = true
@@ -96,11 +109,11 @@ ignore = [
     # Docstrings: enable D205 (blank line after summary), D209 (closing quotes on own
     # line), D213 (multi-line summary on second line). Disable everything else.
     "D1",                                    # missing-docstring variants (not enforced)
-    "D200", "D201", "D202", "D203", "D204",  # D2xx before D205 — off
-    "D206", "D207", "D208",                  # D2xx between D205 and D209 — off
-    "D210", "D211",                          # D2xx between D209 and D213 — off
+    "D200", "D201", "D202", "D203", "D204",  # D2xx before D205 - off
+    "D206", "D207", "D208",                  # D2xx between D205 and D209 - off
+    "D210", "D211",                          # D2xx between D209 and D213 - off
     "D212",                                  # conflicts with D213
-    "D214", "D215",                          # section indentation — off
+    "D214", "D215",                          # section indentation - off
     "D3",                                    # quote style (ruff format handles this)
     "D4",                                    # content / imperative mood (not enforced)
     "DOC",                                   # pydoclint (not used)
@@ -142,6 +155,7 @@ ignore = [
     "C90",     # mccabe complexity
     "PLR0912", # too-many-branches
     "PLR0913", # too-many-arguments
+    "PLR0914", # too-many-locals
     "PLR0915", # too-many-statements
 
     # Spec literal constants appear throughout CCSDS implementations
@@ -184,6 +198,15 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = [
     "RUF067",  # __init__ may define TypeAlias re-exports, not just bare imports
+]
+"scripts/**" = [
+    "INP001",  # standalone CLI scripts, not part of the ccsds_data_messages package
+]
+"src/ccsds_data_messages/models/message.py" = [
+    # __new__(cls, *args, **kwargs) intentionally accepts but doesn't forward
+    # them - Pydantic's __init__ (called separately by the metaclass) receives
+    # them instead; see the docstring.
+    "ARG004",  # unused-static-method-argument
 ]
 "src/ccsds_data_messages/io/kvn/**" = [
     # _parse/_write/_build never use self by design: these adapter classes exist
@@ -279,7 +302,8 @@ enable = [
     "no-value-for-parameter",
     "non-iterator-returned",
     "not-a-mapping",
-    "not-an-iterable",
+    # not-an-iterable / unsubscriptable-object are omitted: both false-positive on
+    # Pydantic's `model_fields` (a ClassVar[dict] pylint doesn't infer as such).
     "not-async-context-manager",
     "not-callable",
     "not-context-manager",
@@ -291,7 +315,6 @@ enable = [
     "unexpected-keyword-arg",
     "unhashable-member",
     "unpacking-non-sequence",
-    "unsubscriptable-object",
     "unsupported-assignment-operation",
     "unsupported-binary-operation",
     "unsupported-delete-operation",

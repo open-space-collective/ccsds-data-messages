@@ -222,3 +222,12 @@ __marimo__/
 
 # Claude
 .claude/
+.mcp.json
+
+# Internal working/review notes
+notes/
+ALPHA_READINESS_REVIEW.md
+docs/gaps.md
+
+# Local scratch fixtures with real operational data
+yam_*_operational.*
