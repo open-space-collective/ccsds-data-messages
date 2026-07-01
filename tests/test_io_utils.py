@@ -1,5 +1,5 @@
 """
-IO utility tests — format_value, format_ccsds_epoch, build_keyword_map, map_kvs.
+IO utility tests - format_value, format_ccsds_epoch, build_keyword_map, map_kvs.
 
 Module under test: src/ccsds_data_messages/io/_utils.py
 """
@@ -33,7 +33,7 @@ class TestFormatValue:
         assert result == "+6503.514"
 
     def test_float_fallback_uses_g_format(self):
-        # Without a spec, floats use ".15g" — never produces "None" or raises
+        # Without a spec, floats use ".15g" - never produces "None" or raises
         result = format_value(6503.514, None)
         assert "6503" in result
         assert "None" not in result

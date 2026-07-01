@@ -1,5 +1,5 @@
 """
-High-level API tests — read(), write(), read_string(), write_string(), type-specific functions.
+High-level API tests - read(), write(), read_string(), write_string(), type-specific functions.
 
 Modules under test:
   src/ccsds_data_messages/io/reader.py
@@ -25,7 +25,7 @@ from ccsds_data_messages.io.reader import (
 from ccsds_data_messages.io.writer import write_string
 
 # ---------------------------------------------------------------------------
-# Happy paths — auto-detection from extension
+# Happy paths - auto-detection from extension
 # ---------------------------------------------------------------------------
 
 
@@ -59,7 +59,7 @@ class TestReadAutoDetect:
 
 
 # ---------------------------------------------------------------------------
-# Happy paths — explicit format and message_type
+# Happy paths - explicit format and message_type
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ class TestTypeSpecificRead:
 
 class TestReadErrors:
     def test_read_nonexistent_file_raises(self):
-        # FileNotFoundError or CCSDSError — the file does not exist
+        # FileNotFoundError or CCSDSError - the file does not exist
         with pytest.raises((FileNotFoundError, OSError)):
             read(Path("_this_file_does_not_exist.opm"))
 

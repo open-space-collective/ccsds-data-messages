@@ -1,5 +1,5 @@
 """
-Registry tests — get_reader, get_writer, register_reader, register_writer, error paths.
+Registry tests - get_reader, get_writer, register_reader, register_writer, error paths.
 
 Module under test: src/ccsds_data_messages/io/registry.py
 """
@@ -26,7 +26,7 @@ def _is_writer(obj) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# get_reader — all built-in (format, message_type) pairs
+# get_reader - all built-in (format, message_type) pairs
 # ---------------------------------------------------------------------------
 
 
@@ -85,7 +85,7 @@ class TestGetReader:
 
 
 # ---------------------------------------------------------------------------
-# get_writer — all built-in (format, message_type) pairs
+# get_writer - all built-in (format, message_type) pairs
 # ---------------------------------------------------------------------------
 
 
@@ -124,7 +124,7 @@ class TestGetWriter:
 
 
 # ---------------------------------------------------------------------------
-# register_reader / register_writer — extensibility contract
+# register_reader / register_writer - extensibility contract
 # ---------------------------------------------------------------------------
 
 

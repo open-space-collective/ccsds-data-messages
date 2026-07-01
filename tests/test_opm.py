@@ -1,5 +1,5 @@
 """
-OPM tests — model validation, spec fixtures (Annex G1-G5), KVN/XML round-trips.
+OPM tests - model validation, spec fixtures (Annex G1-G5), KVN/XML round-trips.
 
 Replaces:
 - test_models.py:TestOPM, TestF1-F4, TestF2ManRefFrameWarning, TestOPMBuilder
@@ -260,7 +260,8 @@ class TestOPMModel:
         assert sv.epoch == "2020-001T00:00:00"
 
     def test_opm_julian_date_epoch_rejected(self):
-        # §7.5.10: Julian Date withdrawn in v3
+        # epoch is absolute-only (CCSDSDate); §7.5.10 defines only the
+        # calendar and day-of-year formats, so a bare decimal is rejected.
         with pytest.raises(pydantic.ValidationError):
             OPM.Data.StateVector(
                 epoch="2459945.5",

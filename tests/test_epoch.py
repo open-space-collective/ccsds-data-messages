@@ -1,5 +1,5 @@
 """
-Epoch parsing tests — CCSDS date formats, time tags, TimeScaledEpoch comparisons.
+Epoch parsing tests - CCSDS date formats, time tags, TimeScaledEpoch comparisons.
 
 Module under test: src/ccsds_data_messages/models/_epoch.py
 
@@ -20,7 +20,7 @@ from ccsds_data_messages.models._epoch import (
 from ccsds_data_messages.models.values import TimeSystem
 
 # ---------------------------------------------------------------------------
-# validate_ccsds_date — accepts calendar and DOY; rejects JD, invalid dates
+# validate_ccsds_date - accepts calendar and DOY; rejects JD, invalid dates
 # ---------------------------------------------------------------------------
 
 
@@ -95,8 +95,9 @@ class TestValidateCcsdsDate:
         result = validate_ccsds_date("2020-02-29T00:00:00", "epoch")
         assert result == "2020-02-29T00:00:00"
 
-    def test_julian_date_format_raises(self):
-        # §7.5.10: JD support was withdrawn in v3 of this document
+    def test_julian_date_like_string_raises(self):
+        # A bare decimal isn't one of §7.5.10's two absolute formats, so it's
+        # rejected by validate_ccsds_date regardless of what it resembles.
         with pytest.raises(ValueError):
             validate_ccsds_date("2459945.5", "epoch")
 
@@ -106,7 +107,7 @@ class TestValidateCcsdsDate:
 
 
 # ---------------------------------------------------------------------------
-# validate_time_tag — accepts absolute CCSDS date, relative seconds; rejects JD
+# validate_time_tag - accepts absolute CCSDS date or relative seconds (6.2.2.3)
 # ---------------------------------------------------------------------------
 
 
@@ -125,14 +126,16 @@ class TestValidateTimeTag:
         result = validate_time_tag("0.0", "time_tag")
         assert result == "0.0"
 
-    def test_julian_date_rejected(self):
-        # §7.5.10: JD withdrawn in v3; a large float alone looks like a JD
-        with pytest.raises(ValueError):
-            validate_time_tag("2459945.5", "time_tag")
+    def test_seven_digit_relative_time_accepted(self):
+        # A relative time tag with a 7-digit integer part (e.g. ~11.6-115.7
+        # days after EPOCH_TZERO) is a valid signed decimal per §6.2.2.3;
+        # nothing in the spec restricts its digit count.
+        result = validate_time_tag("2459945.5", "time_tag")
+        assert result == "2459945.5"
 
 
 # ---------------------------------------------------------------------------
-# parse_ccsds_epoch — returns TimeScaledEpoch
+# parse_ccsds_epoch - returns TimeScaledEpoch
 # ---------------------------------------------------------------------------
 
 
@@ -185,8 +188,9 @@ class TestParseCcsdsEpoch:
         with pytest.raises(ValueError):
             parse_ccsds_epoch("2021-366T00:00:00")
 
-    def test_julian_date_format_raises(self):
-        # §7.5.10: JD support was withdrawn in v3 of this document
+    def test_julian_date_like_string_raises(self):
+        # A bare decimal isn't one of §7.5.10's two absolute formats, so
+        # fromisoformat() rejects it regardless of what it resembles.
         with pytest.raises(ValueError):
             parse_ccsds_epoch("2459945.5")
 
@@ -196,7 +200,7 @@ class TestParseCcsdsEpoch:
 
 
 # ---------------------------------------------------------------------------
-# TimeScaledEpoch — same-system ordering; cross-system comparison raises
+# TimeScaledEpoch - same-system ordering; cross-system comparison raises
 # ---------------------------------------------------------------------------
 
 
@@ -212,7 +216,7 @@ class TestTimeScaledEpoch:
         )
 
     def test_same_time_system_lt_comparison_works(self):
-        # UTC 2020 < UTC 2021 — safe because same scale
+        # UTC 2020 < UTC 2021 - safe because same scale
         assert self._utc(2020) < self._utc(2021)
 
     def test_same_time_system_gt_comparison_works(self):

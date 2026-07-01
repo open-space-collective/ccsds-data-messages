@@ -243,7 +243,7 @@ class TestIncludeUnits:
         self,
     ):
         """
-        §7.7.2.1: OEM KVN ephemeris data lines must not display units — even with include_units=True.
+        §7.7.2.1: OEM KVN ephemeris data lines must not display units - even with include_units=True.
 
         Spec quote: 'units shall be km, km/s, and km/s² ... but the units shall not be displayed.'
         """

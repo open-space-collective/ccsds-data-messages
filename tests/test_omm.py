@@ -1,5 +1,5 @@
 """
-OMM tests — model validation, spec fixtures (Annex G7-G10), KVN/XML round-trips.
+OMM tests - model validation, spec fixtures (Annex G7-G10), KVN/XML round-trips.
 
 Replaces:
 - test_models.py:TestOMM, TestOMMBuilder
@@ -115,6 +115,36 @@ class TestOMMModel:
         )
         assert meta.ref_frame == RefFrame.TEME
 
+    @pytest.mark.parametrize(
+        "ref_frame", [RefFrame.B1950, RefFrame.J2000, RefFrame.WGS84]
+    )
+    def test_omm_epoch_intrinsic_frame_accepted_without_ref_frame_epoch(self, ref_frame):
+        # B1950/J2000/WGS84 have their epoch hardcoded into the frame definition,
+        # so ref_frame_epoch is not required (_EPOCH_INTRINSIC_FRAMES, _base.py).
+        meta = OMM.Metadata(
+            object_name="SAT",
+            object_id="2020-001A",
+            center_name=CenterName.EARTH,
+            ref_frame=ref_frame,
+            time_system=TimeSystem.UTC,
+            mean_element_theory=MeanElementTheory.DSST,
+        )
+        assert meta.ref_frame == ref_frame
+
+    def test_omm_temeofepoch_requires_ref_frame_epoch(self):
+        # TEMEOFEPOCH is "TEMEOfDate evaluated at some specified epoch" (SANA
+        # registry) - it requires an externally-supplied REF_FRAME_EPOCH, unlike
+        # plain TEME.
+        with pytest.raises(pydantic.ValidationError, match="ref_frame_epoch is required"):
+            OMM.Metadata(
+                object_name="SAT",
+                object_id="2020-001A",
+                center_name=CenterName.EARTH,
+                ref_frame=RefFrame.TEMEOFEPOCH,
+                time_system=TimeSystem.UTC,
+                mean_element_theory=MeanElementTheory.DSST,
+            )
+
     def test_omm_teme_requires_earth_center(self):
         # §4.2.4.9 + OMM.Metadata.validate_teme_constraints: TEME only for EARTH OMMs
         with pytest.raises(pydantic.ValidationError, match="Earth"):
@@ -146,6 +176,42 @@ class TestOMMModel:
             mean_element_theory=MeanElementTheory.DSST,
         )
         assert meta.ref_frame == RefFrame.GCRF
+
+    def test_omm_tle_theory_rejects_malformed_object_id(self):
+        # §4.2.4.6: TLE-based OMMs shall use a UN OOSA designator-format OBJECT_ID.
+        with pytest.raises(pydantic.ValidationError, match="UN OOSA designator"):
+            OMM.Metadata(
+                object_name="SAT",
+                object_id="NOTVALID",
+                center_name=CenterName.EARTH,
+                ref_frame=RefFrame.TEME,
+                time_system=TimeSystem.UTC,
+                mean_element_theory=MeanElementTheory.SGP4,
+            )
+
+    def test_omm_tle_theory_accepts_unknown_object_id(self):
+        # UNKNOWN is the spec's own escape value for unlisted/undisclosed objects.
+        meta = OMM.Metadata(
+            object_name="SAT",
+            object_id="UNKNOWN",
+            center_name=CenterName.EARTH,
+            ref_frame=RefFrame.TEME,
+            time_system=TimeSystem.UTC,
+            mean_element_theory=MeanElementTheory.SGP4,
+        )
+        assert meta.object_id == "UNKNOWN"
+
+    def test_omm_non_tle_theory_ignores_object_id_format(self):
+        # The §4.2.4.6 format requirement only applies when the theory requires TLE.
+        meta = OMM.Metadata(
+            object_name="SAT",
+            object_id="NOTVALID",
+            center_name=CenterName.EARTH,
+            ref_frame=RefFrame.GCRF,
+            time_system=TimeSystem.UTC,
+            mean_element_theory=MeanElementTheory.DSST,
+        )
+        assert meta.object_id == "NOTVALID"
 
     def test_omm_sgp4_mean_motion_required(self):
         # §4.2.4.6: SGP4 requires MEAN_MOTION, not SEMI_MAJOR_AXIS
@@ -190,11 +256,11 @@ class TestOMMModel:
             OMM.Data.CovarianceMatrix(
                 cov_ref_frame=ManCovRefFrame.RTN,
                 cx_x=1e-6,
-                # Only one element — missing 20 more; should raise
+                # Only one element - missing 20 more; should raise
             )
 
     def test_omm_doy_epoch_format_accepted(self):
-        # §7.5.10 — G-7 uses "2007-064T10:34:41.4264" (DOY format)
+        # §7.5.10 - G-7 uses "2007-064T10:34:41.4264" (DOY format)
         mke = OMM.Data.MeanKeplerianElements(
             epoch="2007-064T10:34:41.4264",
             semi_major_axis=7191.938639,
@@ -207,7 +273,8 @@ class TestOMMModel:
         assert "2007-064T" in mke.epoch
 
     def test_omm_julian_date_epoch_rejected(self):
-        # §7.5.10: Julian Date withdrawn in v3
+        # epoch is absolute-only (CCSDSDate); §7.5.10 defines only the
+        # calendar and day-of-year formats, so a bare decimal is rejected.
         with pytest.raises(pydantic.ValidationError):
             OMM.Data.MeanKeplerianElements(
                 epoch="2459945.5",

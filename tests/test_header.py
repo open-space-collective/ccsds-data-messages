@@ -1,5 +1,5 @@
 """
-Shared BaseHeader field round-trip tests — classification, message_id.
+Shared BaseHeader field round-trip tests - classification, message_id.
 
 Module under test: src/ccsds_data_messages/models/_base.py
 

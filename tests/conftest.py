@@ -2,7 +2,7 @@
 Shared test infrastructure: factory helpers, assertion utilities, and common fixtures.
 
 All per-message-type test files import from this module. Keep this file free of
-domain-specific logic — just factories, assertion helpers, and constants.
+domain-specific logic - just factories, assertion helpers, and constants.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ EPOCH: str = "2020-001T00:00:00"
 CREATION_DATE: str = "2020-001T12:00:00"
 _REL_TOLERANCE: float = 1e-9
 
-# Per-fixture writer options — some spec fixtures use more decimal places than
+# Per-fixture writer options - some spec fixtures use more decimal places than
 # the model's default format_spec. These overrides ensure lossless round-trips.
 _LOSSLESS_SV = WriterOptions(
     float_formats={

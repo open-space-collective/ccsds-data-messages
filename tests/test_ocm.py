@@ -1,5 +1,5 @@
 """
-OCM tests — model validation, spec fixtures (Annex G15-G20), KVN/XML round-trips.
+OCM tests - model validation, spec fixtures (Annex G15-G20), KVN/XML round-trips.
 
 Replaces:
 - test_models.py:TestOCM*, TestOCMHeader*, TestOCMMetadata*, TestOCMTopLevel, etc.
@@ -24,7 +24,7 @@ from conftest import (
 from ccsds_data_messages import OCM, read, write
 from ccsds_data_messages.io.kvn.ocm_reader import KVNOCMReader
 from ccsds_data_messages.io.kvn.ocm_writer import KVNOCMWriter
-from ccsds_data_messages.models.values import TimeSystem
+from ccsds_data_messages.models.values import CenterName, ManeuverPurpose, TimeSystem
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -100,7 +100,7 @@ class TestOCMMetadata:
         assert meta.time_system == TimeSystem.UTC
 
     def test_ocm_metadata_epoch_tzero_mandatory(self):
-        # §6.2.2.2: EPOCH_TZERO M — no default
+        # §6.2.2.2: EPOCH_TZERO M - no default
         with pytest.raises(pydantic.ValidationError):
             OCM.Metadata(time_system=TimeSystem.UTC)
 
@@ -117,7 +117,8 @@ class TestOCMMetadata:
         assert meta.epoch_tzero is not None
 
     def test_ocm_metadata_julian_date_epoch_tzero_rejected(self):
-        # §7.5.10: Julian Date withdrawn in v3
+        # epoch_tzero is absolute-only (CCSDSDate); §7.5.10 defines only the
+        # calendar and day-of-year formats, so a bare decimal is rejected.
         with pytest.raises(pydantic.ValidationError):
             OCM.Metadata(time_system=TimeSystem.UTC, epoch_tzero="2459945.5")
 
@@ -231,9 +232,32 @@ class TestOCMTrajectoryState:
                 data_lines=[],
             )
 
+    def test_ocm_trajectory_mixed_absolute_and_relative_tags_raises(self):
+        # §6.2.2.5: a block established as absolute-tagged must not accept a
+        # stray relative-format tag.
+        with pytest.raises(pydantic.ValidationError, match=r"section 6\.2\.2\.5"):
+            OCM.TrajectoryStateTimeHistory(
+                traj_type="CARTPV",
+                traj_id="PLAN_A",
+                data_lines=[
+                    "2020-001T00:00:00 7000.0 0.0 0.0 0.0 7.5 0.0",
+                    "120.5 6990.0 0.0 0.0 0.0 7.5 0.0",
+                ],
+            )
+
+    def test_ocm_covariance_mixed_absolute_and_relative_tags_raises(self):
+        # Same §6.2.2.5 check applies to covariance blocks via the same helper.
+        with pytest.raises(pydantic.ValidationError, match=r"section 6\.2\.2\.5"):
+            OCM.CovarianceTimeHistory(
+                data_lines=[
+                    "2020-001T00:00:00 1e-6",
+                    "120.5 1e-6",
+                ]
+            )
+
 
 # ---------------------------------------------------------------------------
-# OCMBuilder — one case per setter method
+# OCMBuilder - one case per setter method
 # ---------------------------------------------------------------------------
 
 
@@ -341,7 +365,7 @@ class TestOCMBuilder:
 
 
 # ---------------------------------------------------------------------------
-# Remaining OCM block types — direct-construction validation
+# Remaining OCM block types - direct-construction validation
 # ---------------------------------------------------------------------------
 
 
@@ -441,6 +465,32 @@ class TestOCMManeuverSpecification:
         )
         assert len(man.data_lines) == 2
 
+    def test_man_purpose_accepts_known_enum_value(self):
+        man = OCM.ManeuverSpecification(
+            **self._KW,
+            man_purpose=ManeuverPurpose.SK,
+            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+        )
+        assert man.man_purpose == ManeuverPurpose.SK
+
+    def test_man_purpose_accepts_grav_assist_parametric_value(self):
+        purpose = ManeuverPurpose.grav_assist_from(CenterName.EARTH)
+        man = OCM.ManeuverSpecification(
+            **self._KW,
+            man_purpose=purpose,
+            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+        )
+        assert man.man_purpose == "GRAV_ASSIST_FROM_EARTH"
+
+    def test_man_purpose_accepts_arbitrary_free_text(self):
+        # Table 6-7's vocabulary is "could include", not a closed set.
+        man = OCM.ManeuverSpecification(
+            **self._KW,
+            man_purpose="CUSTOM_PURPOSE",
+            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+        )
+        assert man.man_purpose == "CUSTOM_PURPOSE"
+
 
 class TestOCMPerturbationsSpecification:
     def test_all_fields_optional_empty_construction_accepted(self):
@@ -463,6 +513,14 @@ class TestOCMOrbitDeterminationData:
         )
         assert od.od_id == "OD1"
 
+    def test_seven_digit_relative_od_epoch_accepted(self):
+        # od_epoch is a TimeTag (§6.2.2.3): a relative time in seconds is valid
+        # regardless of its digit count, e.g. ~28.5 days after EPOCH_TZERO.
+        od = OCM.OrbitDeterminationData(
+            od_id="OD1", od_method="RANGE", od_epoch="2459945.5"
+        )
+        assert od.od_epoch == "2459945.5"
+
 
 class TestOCMUserDefinedParameters:
     def test_minimal_construction_accepted(self):
@@ -471,7 +529,7 @@ class TestOCMUserDefinedParameters:
 
 
 # ---------------------------------------------------------------------------
-# Spec fixture round-trips (Annex G15-G19, KVN — should pass)
+# Spec fixture round-trips (Annex G15-G19, KVN - should pass)
 # ---------------------------------------------------------------------------
 
 
@@ -502,7 +560,7 @@ def test_ocm_kvn_spec_fixture_round_trip_writer_gap(name: str, tmp_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# OCM fixture readability — distinct from round-trip tests above
+# OCM fixture readability - distinct from round-trip tests above
 #
 # These tests assert only that fixtures can be *read* and that write→read
 # produces a semantically equal model.  They do NOT assert that the writer
@@ -516,7 +574,7 @@ def test_ocm_kvn_spec_fixture_can_be_read(name: str) -> None:
     OCM spec fixtures G16-G19 must be parseable without error.
 
     These contain physical properties, deployments, multi-trajectory blocks,
-    and covariance histories — all sections the reader must handle.
+    and covariance histories - all sections the reader must handle.
     """
     fixture = FIXTURES / name
     assert fixture.exists(), f"Fixture not found: {fixture}"

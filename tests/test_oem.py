@@ -1,5 +1,5 @@
 """
-OEM tests — model validation, spec fixtures (Annex G11-G14), KVN/XML round-trips.
+OEM tests - model validation, spec fixtures (Annex G11-G14), KVN/XML round-trips.
 
 Replaces:
 - test_models.py:TestOEM
@@ -174,7 +174,8 @@ class TestOEMModel:
         assert "2020-01-01T" in meta.start_time
 
     def test_oem_julian_date_start_time_rejected(self):
-        # §7.5.10: Julian Date withdrawn in v3
+        # start_time is absolute-only (CCSDSDate); §7.5.10 defines only the
+        # calendar and day-of-year formats, so a bare decimal is rejected.
         with pytest.raises(pydantic.ValidationError):
             _minimal_metadata(start_time="2459945.5")
 
@@ -228,6 +229,74 @@ class TestOEMModel:
             useable_stop_time="2020-001T00:15:00",
         )
         assert meta.useable_start_time is not None
+
+    @staticmethod
+    def _segment(**metadata_kw) -> OEM.Segment:
+        meta = _minimal_metadata(**metadata_kw)
+        return OEM.Segment(
+            metadata=meta,
+            ephemeris_data=OEM.Segment.EphemerisData(
+                ephemeris_data_lines=[
+                    _ephemeris_line(epoch=meta.start_time),
+                    _ephemeris_line(epoch=meta.stop_time),
+                ]
+            ),
+        )
+
+    def test_oem_useable_interval_overlap_falls_back_to_total_span_when_omitted(self):
+        # §5.2.4.4/7.5.10: an omitted USEABLE_START_TIME/USEABLE_STOP_TIME means
+        # "all data is assumed valid", so the overlap check must fall back to the
+        # segment's total start_time/stop_time rather than skip the check.
+        header = OEM.Header(
+            ccsds_oem_vers="3.0", creation_date=CREATION_DATE, originator="TEST"
+        )
+        seg1 = self._segment(
+            start_time="2020-001T00:00:00",
+            stop_time="2020-001T00:20:00",
+            # useable_stop_time omitted -> falls back to stop_time="00:20:00"
+        )
+        seg2 = self._segment(
+            start_time="2020-001T00:10:00",
+            stop_time="2020-001T00:30:00",
+            # useable_start_time omitted -> falls back to start_time="00:10:00"
+        )
+        with pytest.raises(pydantic.ValidationError, match="must not overlap"):
+            OEM(header=header, segments=[seg1, seg2])
+
+    def test_oem_useable_interval_shared_boundary_accepted(self):
+        header = OEM.Header(
+            ccsds_oem_vers="3.0", creation_date=CREATION_DATE, originator="TEST"
+        )
+        seg1 = self._segment(
+            start_time="2020-001T00:00:00", stop_time="2020-001T00:20:00"
+        )
+        seg2 = self._segment(
+            start_time="2020-001T00:20:00", stop_time="2020-001T00:40:00"
+        )
+        oem = OEM(header=header, segments=[seg1, seg2])
+        assert len(oem.segments) == 2
+
+    def test_oem_overlapping_raw_spans_accepted_when_useable_intervals_disjoint(self):
+        # §5.2.4.4: STOP_TIME of segment 1 may exceed START_TIME of segment 2 (raw
+        # spans overlapping, e.g. for interpolation padding) as long as the
+        # explicit USEABLE_STOP_TIME/USEABLE_START_TIME themselves do not overlap.
+        header = OEM.Header(
+            ccsds_oem_vers="3.0", creation_date=CREATION_DATE, originator="TEST"
+        )
+        seg1 = self._segment(
+            start_time="2020-001T00:00:00",
+            stop_time="2020-001T00:25:00",  # raw span extends past seg2's start
+            useable_start_time="2020-001T00:00:00",
+            useable_stop_time="2020-001T00:20:00",
+        )
+        seg2 = self._segment(
+            start_time="2020-001T00:15:00",  # raw span starts before seg1's stop
+            stop_time="2020-001T00:40:00",
+            useable_start_time="2020-001T00:20:00",
+            useable_stop_time="2020-001T00:40:00",
+        )
+        oem = OEM(header=header, segments=[seg1, seg2])
+        assert len(oem.segments) == 2
 
     def test_oem_ref_frame_teme_not_rejected_in_oem(self):
         # Unlike OPM, OEM does not prohibit TEME; TEME may appear in any ODM except OPM
@@ -377,11 +446,20 @@ class TestOEMBuilder:
         assert oem.segments[0].covariance_matrix is not None
 
     def test_build_with_multiple_segments(self):
+        # Second segment's span must not overlap the first's (5.2.4.4); a shared
+        # boundary is permitted.
+        second_meta = dict(self._META_KW)
+        second_meta["start_time"] = "2020-001T00:10:00"
+        second_meta["stop_time"] = "2020-001T00:20:00"
+        second_lines = [
+            {**self._EPHEMERIS_LINES[0], "epoch": "2020-001T00:10:00"},
+            {**self._EPHEMERIS_LINES[1], "epoch": "2020-001T00:20:00"},
+        ]
         oem = (
             OEM.builder()
             .header(originator="JAXA")
             .add_segment(dict(self._META_KW), self._EPHEMERIS_LINES)
-            .add_segment(dict(self._META_KW), self._EPHEMERIS_LINES)
+            .add_segment(second_meta, second_lines)
             .build()
         )
         assert len(oem.segments) == 2

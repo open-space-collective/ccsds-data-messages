@@ -1,5 +1,5 @@
 """
-Spec conformance tests — anchored to CCSDS 502.0-B-3 section numbers.
+Spec conformance tests - anchored to CCSDS 502.0-B-3 section numbers.
 
 These tests document what the spec requires and fail when the code diverges.
 Some tests are expected to fail today (gaps confirmed at runtime); they are
@@ -36,11 +36,11 @@ _HEADER_KW = {"creation_date": CREATION_DATE, "originator": "TEST"}
 
 class TestSection77KvnUnits:
     """
-    §7.7 Units in Orbit Data Messages — KVN format.
+    §7.7 Units in Orbit Data Messages - KVN format.
 
-    §7.7.2.1: OEM ephemeris data lines — "units shall not be displayed."
-    §7.7.2.2: OEM covariance data lines — "units shall not be displayed."
-    §7.7.3.5: OCM trajectory/covariance/maneuver data lines — "Units shall
+    §7.7.2.1: OEM ephemeris data lines - "units shall not be displayed."
+    §7.7.2.2: OEM covariance data lines - "units shall not be displayed."
+    §7.7.3.5: OCM trajectory/covariance/maneuver data lines - "Units shall
               not be displayed in OCM trajectory state, covariance, or
               maneuver data lines themselves."
     """
@@ -172,14 +172,14 @@ class TestSection77KvnUnits:
 
 class TestSection791ValidVersions:
     """
-    §7.9.1 — valid version strings per message type.
+    §7.9.1 - valid version strings per message type.
 
     OPM: 1.0, 2.0, 3.0
     OMM: 2.0, 3.0
     OEM: 1.0, 2.0, 3.0
     OCM: 3.X (major must be 3)
 
-    Current state: VersionStr uses r"3\\.\\d+" — OPM 1.0/2.0 and OMM 2.0
+    Current state: VersionStr uses r"3\\.\\d+" - OPM 1.0/2.0 and OMM 2.0
     are wrongly rejected. Tests below document the correct spec behaviour.
     """
 
@@ -198,7 +198,7 @@ class TestSection791ValidVersions:
 
         GAP: current VersionStr validator pattern r'3\\.\\d+' wrongly rejects 1.0 and 2.0.
         """
-        # GAP — will fail until VersionStr is per-message-type
+        # GAP - will fail until VersionStr is per-message-type
         h = OPM.Header(ccsds_opm_vers=vers, **_HEADER_KW)
         assert h.ccsds_opm_vers == vers
 
@@ -225,7 +225,7 @@ class TestSection791ValidVersions:
 
         GAP: current VersionStr wrongly rejects 2.0.
         """
-        # GAP — will fail until VersionStr is per-message-type
+        # GAP - will fail until VersionStr is per-message-type
         h = OMM.Header(ccsds_omm_vers="2.0", **_HEADER_KW)
         assert h.ccsds_omm_vers == "2.0"
 
@@ -253,7 +253,7 @@ class TestSection791ValidVersions:
 
         GAP: current VersionStr wrongly rejects 1.0 and 2.0.
         """
-        # GAP — will fail until VersionStr is per-message-type
+        # GAP - will fail until VersionStr is per-message-type
         h = OEM.Header(ccsds_oem_vers=vers, **_HEADER_KW)
         assert h.ccsds_oem_vers == vers
 
@@ -287,7 +287,7 @@ class TestSection791ValidVersions:
 
 
 class TestSection513OEMSingleObject:
-    """§5.1.3 — 'The OEM shall be a plain text file consisting of orbit data for a single object.'"""
+    """§5.1.3 - 'The OEM shall be a plain text file consisting of orbit data for a single object.'"""
 
     def _make_segment(self, object_name: str, epoch_offset: int = 0) -> OEM.Segment:
         start = f"2020-001T{epoch_offset:02d}:00:00"
@@ -344,13 +344,13 @@ class TestSection513OEMSingleObject:
 
 
 # ---------------------------------------------------------------------------
-# §5.2.4.7  OEM interpolation — sufficient ephemeris records
+# §5.2.4.7  OEM interpolation - sufficient ephemeris records
 # ---------------------------------------------------------------------------
 
 
 class TestSection5247InterpolationRecords:
     """
-    §5.2.4.7 — data blocks must contain enough ephemeris records for interpolation.
+    §5.2.4.7 - data blocks must contain enough ephemeris records for interpolation.
 
     Rule: len(ephemeris_data_lines) >= interpolation_degree + 1
     """
@@ -448,13 +448,13 @@ class TestSection5247InterpolationRecords:
 
 
 # ---------------------------------------------------------------------------
-# §4.2.4.6  OMM TLE-based conventions — forward direction
+# §4.2.4.6  OMM TLE-based conventions - forward direction
 # ---------------------------------------------------------------------------
 
 
 class TestSection4246OMMSGP4:
     """
-    §4.2.4.6 — TLE-based OMMs: CENTER_NAME=EARTH, REF_FRAME=TEME, TIME_SYSTEM=UTC.
+    §4.2.4.6 - TLE-based OMMs: CENTER_NAME=EARTH, REF_FRAME=TEME, TIME_SYSTEM=UTC.
 
     ``validate_tle_theory_requires_teme`` enforces the forward direction
     (SGP/SGP4 theory -> REF_FRAME=TEME); ``validate_teme_constraints`` enforces

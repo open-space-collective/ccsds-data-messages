@@ -106,7 +106,7 @@ def test_parse_kvn_blank_line_in_sequence():
 
 
 # ---------------------------------------------------------------------------
-# Diagnostic warnings — malformed-but-tolerated input (§7.3.2, 7.3.4, 7.4.4, 7.8.5)
+# Diagnostic warnings - malformed-but-tolerated input (§7.3.2, 7.3.4, 7.4.4, 7.8.5)
 # ---------------------------------------------------------------------------
 
 

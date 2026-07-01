@@ -218,8 +218,9 @@ class TestOemToTracsSOcm:
     def test_mixed_cov_ref_frame_splits_into_multiple_blocks(self):
         # Two distinct cov_ref_frame values in one segment → two CovarianceTimeHistory blocks.
         # Extra seg uses 12 ephem lines (EME2000) with 3 covariance lines (RTN, TNW, RTN).
+        # Starts after the default segment's stop_time (11:00) - spans must not overlap (5.2.4.4).
         extra_ephem = [
-            {"epoch": f"2020-001T{2 + i:02d}:00:00", **_BASE_EPH} for i in range(12)
+            {"epoch": f"2020-001T{12 + i:02d}:00:00", **_BASE_EPH} for i in range(12)
         ]
         extra_seg = {
             "metadata_kwargs": {
@@ -228,23 +229,23 @@ class TestOemToTracsSOcm:
                 "center_name": CenterName.EARTH,
                 "ref_frame": RefFrame.EME2000,
                 "time_system": TimeSystem.UTC,
-                "start_time": "2020-001T02:00:00",
-                "stop_time": "2020-001T13:00:00",
+                "start_time": "2020-001T12:00:00",
+                "stop_time": "2020-001T23:00:00",
             },
             "ephemeris_data_lines": extra_ephem,
             "covariance_matrix_lines": [
                 dict(
-                    epoch="2020-001T02:00:00",
+                    epoch="2020-001T12:00:00",
                     cov_ref_frame=ManCovRefFrame.RTN,
                     **_COV_LINE_BASE,
                 ),
                 dict(
-                    epoch="2020-001T03:00:00",
+                    epoch="2020-001T13:00:00",
                     cov_ref_frame=ManCovRefFrame.TNW,
                     **_COV_LINE_BASE,
                 ),
                 dict(
-                    epoch="2020-001T04:00:00",
+                    epoch="2020-001T14:00:00",
                     cov_ref_frame=ManCovRefFrame.RTN,
                     **_COV_LINE_BASE,
                 ),
@@ -277,12 +278,12 @@ class TestOemToTracsSOcm:
                 "center_name": CenterName.EARTH,
                 "ref_frame": RefFrame.GCRF,
                 "time_system": TimeSystem.UTC,
-                "start_time": "2020-001T02:00:00",
-                "stop_time": "2020-001T03:00:00",
+                "start_time": "2020-001T12:00:00",
+                "stop_time": "2020-001T13:00:00",
             },
             "ephemeris_data_lines": [
                 {
-                    "epoch": "2020-001T02:00:00",
+                    "epoch": "2020-001T12:00:00",
                     "x": 6500.0,
                     "y": 0.0,
                     "z": 0.0,
@@ -291,7 +292,7 @@ class TestOemToTracsSOcm:
                     "z_dot": 0.0,
                 },
                 {
-                    "epoch": "2020-001T03:00:00",
+                    "epoch": "2020-001T13:00:00",
                     "x": 6400.0,
                     "y": 0.0,
                     "z": 0.0,
@@ -315,12 +316,12 @@ class TestOemToTracsSOcm:
                 "center_name": CenterName.EARTH,
                 "ref_frame": RefFrame.GCRF,
                 "time_system": TimeSystem.UTC,
-                "start_time": "2020-001T02:00:00",
-                "stop_time": "2020-001T03:00:00",
+                "start_time": "2020-001T12:00:00",
+                "stop_time": "2020-001T13:00:00",
             },
             "ephemeris_data_lines": [
                 {
-                    "epoch": "2020-001T02:00:00",
+                    "epoch": "2020-001T12:00:00",
                     "x": 6500.0,
                     "y": 0.0,
                     "z": 0.0,
@@ -329,7 +330,7 @@ class TestOemToTracsSOcm:
                     "z_dot": 0.0,
                 },
                 {
-                    "epoch": "2020-001T03:00:00",
+                    "epoch": "2020-001T13:00:00",
                     "x": 6400.0,
                     "y": 0.0,
                     "z": 0.0,
@@ -442,7 +443,7 @@ class TestOemToTracsSOcm:
             )
             .build()
         )
-        # No message_id kwarg — falls back to OEM header's message_id.
+        # No message_id kwarg - falls back to OEM header's message_id.
         kwargs_without_msg_id = {
             k: v for k, v in TRACSS_REQUIRED.items() if k != "message_id"
         }
