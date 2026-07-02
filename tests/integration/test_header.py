@@ -11,7 +11,10 @@ in test_opm.py/test_omm.py/test_oem.py/test_ocm.py).
 from __future__ import annotations
 
 import pytest
-from conftest import make_ocm, make_oem, make_omm, make_opm
+from conftest import make_ocm
+from conftest import make_oem
+from conftest import make_omm
+from conftest import make_opm
 
 from ccsds_data_messages.io.kvn.ocm_reader import KVNOCMReader
 from ccsds_data_messages.io.kvn.ocm_writer import KVNOCMWriter

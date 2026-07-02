@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from ccsds_data_messages import OEM, oem_to_tracss_ocm
-from ccsds_data_messages.models.values import (
-    CenterName,
-    ManCovRefFrame,
-    OrbitalElements,
-    RefFrame,
-    TimeSystem,
-)
+from ccsds_data_messages import OEM
+from ccsds_data_messages import oem_to_tracss_ocm
+from ccsds_data_messages.models.values import CenterName
+from ccsds_data_messages.models.values import ManCovRefFrame
+from ccsds_data_messages.models.values import OrbitalElements
+from ccsds_data_messages.models.values import RefFrame
+from ccsds_data_messages.models.values import TimeSystem
 
 CREATION_DATE = "2020-001T12:00:00"
 
@@ -72,7 +71,7 @@ def _make_oem(
     Build an OEM suitable for oem_to_tracss_ocm().
 
     Default 12 data lines (hourly, 00:00-11:00) satisfies useable_record_padding=5
-    (needs ≥11 lines). Uses EME2000 as required by TraCSS.
+    (needs >=11 lines). Uses EME2000 as required by TraCSS.
     """
     base_line: dict = dict(**_BASE_EPH)
     if with_accel:
@@ -125,8 +124,8 @@ class TestOemToTracsSOcm:
 
     def test_metadata_time_span_derived_from_useable_windows(self):
         # With padding=5 and 12 lines per segment, useable window is lines[5]-lines[6].
-        # Segment 0: 00:00-11:00 → useable 05:00-06:00
-        # Extra seg: 12:00-23:00 → useable 17:00-18:00
+        # Segment 0: 00:00-11:00 gives useable 05:00-06:00
+        # Extra seg: 12:00-23:00 gives useable 17:00-18:00
         extra_lines = [
             {"epoch": f"2020-001T{12 + i:02d}:00:00", **_BASE_EPH} for i in range(12)
         ]
@@ -216,7 +215,7 @@ class TestOemToTracsSOcm:
         )
 
     def test_mixed_cov_ref_frame_splits_into_multiple_blocks(self):
-        # Two distinct cov_ref_frame values in one segment → two CovarianceTimeHistory blocks.
+        # Two distinct cov_ref_frame values in one segment produce two CovarianceTimeHistory blocks.
         # Extra seg uses 12 ephem lines (EME2000) with 3 covariance lines (RTN, TNW, RTN).
         # Starts after the default segment's stop_time (11:00) - spans must not overlap (5.2.4.4).
         extra_ephem = [
@@ -268,7 +267,7 @@ class TestOemToTracsSOcm:
         assert ocm.covariances is None
 
     def test_mismatched_object_name_raises(self):
-        """§5.1.3 is now enforced at OEM construction; mismatched names never reach the converter."""
+        """Section 5.1.3 is now enforced at OEM construction; mismatched names never reach the converter."""
         import pydantic
 
         extra_seg = {
@@ -306,7 +305,7 @@ class TestOemToTracsSOcm:
             _make_oem(extra_segments=[extra_seg])
 
     def test_mismatched_object_id_raises(self):
-        """§5.1.3 is now enforced at OEM construction; mismatched IDs never reach the converter."""
+        """Section 5.1.3 is now enforced at OEM construction; mismatched IDs never reach the converter."""
         import pydantic
 
         extra_seg = {
@@ -540,6 +539,6 @@ class TestOemToTracsSOcm:
             oem_to_tracss_ocm(oem, **kwargs_without_msg_id)
 
     def test_raises_on_too_few_records_for_padding(self):
-        oem = _make_oem(n_lines=3)  # 3 lines, needs ≥11 for padding=5
+        oem = _make_oem(n_lines=3)  # 3 lines, needs >=11 for padding=5
         with pytest.raises(ValueError, match="USEABLE"):
             oem_to_tracss_ocm(oem, **TRACSS_REQUIRED)

@@ -3,20 +3,19 @@ Epoch parsing tests - CCSDS date formats, time tags, TimeScaledEpoch comparisons
 
 Module under test: src/ccsds_data_messages/models/_epoch.py
 
-All tests cite §7.5.10: "times shall be given in one of the following two formats:
-YYYY-MM-DDThh:mm:ss[.d→d][Z]  or  YYYY-DDDThh:mm:ss[.d→d][Z]"
+All tests cite section 7.5.10: "times shall be given in one of the following two formats:
+YYYY-MM-DDThh:mm:ss[.d...d][Z]  or  YYYY-DDDThh:mm:ss[.d...d][Z]"
 """
 
 from __future__ import annotations
 
 import pytest
 
-from ccsds_data_messages.models._epoch import (
-    TimeScaledEpoch,
-    parse_ccsds_epoch,
-    validate_ccsds_date,
-    validate_time_tag,
-)
+from ccsds_data_messages.models._epoch import TimeScaledEpoch
+from ccsds_data_messages.models._epoch import _normalize_epoch
+from ccsds_data_messages.models._epoch import parse_ccsds_epoch
+from ccsds_data_messages.models._epoch import validate_ccsds_date
+from ccsds_data_messages.models._epoch import validate_time_tag
 from ccsds_data_messages.models.values import TimeSystem
 
 # ---------------------------------------------------------------------------
@@ -26,22 +25,22 @@ from ccsds_data_messages.models.values import TimeSystem
 
 class TestValidateCcsdsDate:
     def test_calendar_format_valid_returns_value(self):
-        # §7.5.10: YYYY-MM-DDThh:mm:ss is the primary calendar format
+        # Section 7.5.10: YYYY-MM-DDThh:mm:ss is the primary calendar format
         result = validate_ccsds_date("2021-03-15T12:00:00", "epoch")
         assert result == "2021-03-15T12:00:00"
 
     def test_calendar_format_with_subseconds_valid(self):
-        # §7.5.10: "as many 'd' characters as required"
+        # Section 7.5.10: "as many 'd' characters as required"
         result = validate_ccsds_date("2021-03-15T12:00:00.123456", "epoch")
         assert result == "2021-03-15T12:00:00.123456"
 
     def test_calendar_format_with_z_suffix_valid(self):
-        # §7.5.10: Z is the optional UTC designator
+        # Section 7.5.10: Z is the optional UTC designator
         result = validate_ccsds_date("2021-03-15T12:00:00Z", "epoch")
         assert result == "2021-03-15T12:00:00Z"
 
     def test_doy_format_valid_returns_value(self):
-        # §7.5.10: YYYY-DDDThh:mm:ss is the DOY format; DOY 74 of 2021 = March 15
+        # Section 7.5.10: YYYY-DDDThh:mm:ss is the DOY format; DOY 74 of 2021 = March 15
         result = validate_ccsds_date("2021-074T12:00:00", "epoch")
         assert result == "2021-074T12:00:00"
 
@@ -96,7 +95,7 @@ class TestValidateCcsdsDate:
         assert result == "2020-02-29T00:00:00"
 
     def test_julian_date_like_string_raises(self):
-        # A bare decimal isn't one of §7.5.10's two absolute formats, so it's
+        # A bare decimal isn't one of section 7.5.10's two absolute formats, so it's
         # rejected by validate_ccsds_date regardless of what it resembles.
         with pytest.raises(ValueError):
             validate_ccsds_date("2459945.5", "epoch")
@@ -128,7 +127,7 @@ class TestValidateTimeTag:
 
     def test_seven_digit_relative_time_accepted(self):
         # A relative time tag with a 7-digit integer part (e.g. ~11.6-115.7
-        # days after EPOCH_TZERO) is a valid signed decimal per §6.2.2.3;
+        # days after EPOCH_TZERO) is a valid signed decimal per section 6.2.2.3;
         # nothing in the spec restricts its digit count.
         result = validate_time_tag("2459945.5", "time_tag")
         assert result == "2459945.5"
@@ -189,7 +188,7 @@ class TestParseCcsdsEpoch:
             parse_ccsds_epoch("2021-366T00:00:00")
 
     def test_julian_date_like_string_raises(self):
-        # A bare decimal isn't one of §7.5.10's two absolute formats, so
+        # A bare decimal isn't one of section 7.5.10's two absolute formats, so
         # fromisoformat() rejects it regardless of what it resembles.
         with pytest.raises(ValueError):
             parse_ccsds_epoch("2459945.5")
@@ -248,3 +247,45 @@ class TestTimeScaledEpoch:
     def test_cross_time_system_ge_raises(self):
         with pytest.raises(ValueError):
             _ = self._utc(2020) >= self._gps(2020)
+
+
+# ---------------------------------------------------------------------------
+# _normalize_epoch - canonical, chronologically sortable form
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeEpoch:
+    """
+    _normalize_epoch must canonicalize both format and fractional precision.
+
+    Equal instants written differently (DOY vs calendar, trailing-zero
+    fractions, presence/absence of a fractional part) must normalize to the same
+    string, so ``<``/``==`` on the result track chronological order and equality.
+    The OEM/OCM strictly-increasing and no-duplicate checks depend on this.
+    """
+
+    def test_trailing_zero_fraction_equals_no_fraction(self):
+        # Section 7.5.10: fractional seconds are optional; ...:00 and ...:00.0 are the
+        # same instant and must compare equal after normalization.
+        assert _normalize_epoch("2021-03-15T12:00:00") == _normalize_epoch(
+            "2021-03-15T12:00:00.0"
+        )
+        assert _normalize_epoch("2021-03-15T12:00:00.5") == _normalize_epoch(
+            "2021-03-15T12:00:00.50"
+        )
+
+    def test_doy_and_calendar_same_instant_equal(self):
+        # DOY 74 of 2021 == March 15, 2021.
+        assert _normalize_epoch("2021-074T12:00:00") == _normalize_epoch(
+            "2021-03-15T12:00:00"
+        )
+
+    def test_z_suffix_ignored(self):
+        assert _normalize_epoch("2021-03-15T12:00:00Z") == _normalize_epoch(
+            "2021-03-15T12:00:00"
+        )
+
+    def test_chronological_order_preserved(self):
+        earlier = _normalize_epoch("2021-03-15T12:00:00")
+        later = _normalize_epoch("2021-03-15T12:00:00.001")
+        assert earlier < later

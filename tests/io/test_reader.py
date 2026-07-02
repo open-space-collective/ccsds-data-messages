@@ -1,9 +1,12 @@
 """
-High-level API tests - read(), write(), read_string(), write_string(), type-specific functions.
+Reader-side high-level API tests.
+
+Covers read() auto-detection and explicit format/type, read_string(), the
+type-specific read functions (read_opm/read_omm/read_oem/read_ocm), and read
+error paths.
 
 Modules under test:
   src/ccsds_data_messages/io/reader.py
-  src/ccsds_data_messages/io/writer.py
 """
 
 from __future__ import annotations
@@ -11,56 +14,57 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURES, make_oem, make_omm, make_opm
+from conftest import FIXTURES
+from conftest import make_omm
+from conftest import make_opm
 
-from ccsds_data_messages import OCM, OEM, OMM, OPM, read, write
+from ccsds_data_messages import OCM
+from ccsds_data_messages import OEM
+from ccsds_data_messages import OMM
+from ccsds_data_messages import OPM
+from ccsds_data_messages import read
+from ccsds_data_messages import write
+from ccsds_data_messages.exceptions import DetectionError
 from ccsds_data_messages.exceptions import SpecViolationError
-from ccsds_data_messages.io.reader import (
-    read_ocm,
-    read_oem,
-    read_omm,
-    read_opm,
-    read_string,
-)
-from ccsds_data_messages.io.writer import write_string
-
-# ---------------------------------------------------------------------------
-# Happy paths - auto-detection from extension
-# ---------------------------------------------------------------------------
+from ccsds_data_messages.io.reader import read_ocm
+from ccsds_data_messages.io.reader import read_oem
+from ccsds_data_messages.io.reader import read_omm
+from ccsds_data_messages.io.reader import read_opm
+from ccsds_data_messages.io.reader import read_string
 
 
-class TestReadAutoDetect:
+class TestReadAutoDetection:
     def test_read_opm_from_kvn_extension(self):
         """read() infers KVN format and OPM type from .kvn filename."""
         fixture = FIXTURES / "opm_g1_simple.kvn"
-        msg = read(fixture)
+        msg: OPM = read(fixture)
         assert isinstance(msg, OPM)
 
     def test_read_opm_from_xml_extension(self):
         """read() infers XML format and OPM type from .xml filename."""
         fixture = FIXTURES / "opm_g5.xml"
-        msg = read(fixture)
+        msg: OPM = read(fixture)
         assert isinstance(msg, OPM)
 
     def test_read_omm_from_kvn_extension(self):
         fixture = FIXTURES / "omm_g7.kvn"
-        msg = read(fixture)
+        msg: OMM = read(fixture)
         assert isinstance(msg, OMM)
 
     def test_read_oem_from_kvn_extension(self):
         fixture = FIXTURES / "oem_g11.kvn"
-        msg = read(fixture)
+        msg: OEM = read(fixture)
         assert isinstance(msg, OEM)
 
     def test_read_ocm_from_kvn_extension(self):
         fixture = FIXTURES / "ocm_g15_minimal.kvn"
-        msg = read(fixture)
+        msg: OCM = read(fixture)
         assert isinstance(msg, OCM)
 
-
-# ---------------------------------------------------------------------------
-# Happy paths - explicit format and message_type
-# ---------------------------------------------------------------------------
+    def test_read_unknown_extension_raises_value_error(self):
+        fixture = FIXTURES / "unknown.txt"
+        with pytest.raises(DetectionError):
+            read(fixture)
 
 
 class TestReadExplicit:
@@ -100,51 +104,6 @@ class TestReadString:
 
 
 # ---------------------------------------------------------------------------
-# write / write_string
-# ---------------------------------------------------------------------------
-
-
-class TestWrite:
-    def test_write_infers_kvn_format_from_extension(self, tmp_path: Path):
-        """§7.3.6: first non-blank line of KVN must be the version keyword."""
-        opm = make_opm()
-        path = tmp_path / "out.opm"
-        write(opm, path)
-        content = path.read_text()
-        first_line = next(line for line in content.splitlines() if line.strip())
-        assert first_line.strip().startswith("CCSDS_OPM_VERS")
-
-    def test_write_infers_xml_format_from_extension(self, tmp_path: Path):
-        """XML output has an <opm ...> root element."""
-        opm = make_opm()
-        path = tmp_path / "out.xml"
-        write(opm, path)
-        content = path.read_text()
-        assert "<opm" in content or "<OPM" in content
-
-    def test_write_oem_kvn_contains_start_stop_markers(self, tmp_path: Path):
-        """KVN OEM must contain META_START / META_STOP delimiters (§5.2)."""
-        oem = make_oem()
-        path = tmp_path / "out.oem"
-        write(oem, path)
-        content = path.read_text()
-        assert "META_START" in content
-        assert "META_STOP" in content
-
-    def test_write_string_returns_str(self):
-        opm = make_opm()
-        result = write_string(opm, fmt="kvn")
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_write_string_xml_returns_xml_content(self):
-        opm = make_opm()
-        result = write_string(opm, fmt="xml")
-        assert isinstance(result, str)
-        assert "<opm" in result or "<OPM" in result
-
-
-# ---------------------------------------------------------------------------
 # Type-specific read functions
 # ---------------------------------------------------------------------------
 
@@ -171,7 +130,7 @@ class TestTypeSpecificRead:
         assert isinstance(msg, OCM)
 
     def test_write_then_read_produces_equal_opm(self, tmp_path: Path):
-        """OPM write → type-specific read → equal model."""
+        """OPM write, then type-specific read, yields an equal model."""
         opm = make_opm()
         path = tmp_path / "out.opm"
         write(opm, path)
@@ -209,7 +168,7 @@ class TestReadErrors:
     def test_read_string_missing_mandatory_field_raises_spec_violation_error(
         self, tmp_path
     ):
-        # Missing OBJECT_NAME in a syntactically valid KVN → SpecViolationError or similar
+        # Missing OBJECT_NAME in a syntactically valid KVN raises SpecViolationError or similar
         broken_kvn = (
             "CCSDS_OPM_VERS = 3.0\n"
             "CREATION_DATE = 2020-001T12:00:00\n"

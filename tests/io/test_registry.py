@@ -9,12 +9,10 @@ from __future__ import annotations
 import pytest
 
 from ccsds_data_messages.exceptions import UnsupportedAdapterError
-from ccsds_data_messages.io.registry import (
-    get_reader,
-    get_writer,
-    register_reader,
-    register_writer,
-)
+from ccsds_data_messages.io.registry import get_reader
+from ccsds_data_messages.io.registry import get_writer
+from ccsds_data_messages.io.registry import register_reader
+from ccsds_data_messages.io.registry import register_writer
 
 
 def _is_reader(obj) -> bool:

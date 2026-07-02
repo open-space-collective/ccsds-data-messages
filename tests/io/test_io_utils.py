@@ -6,16 +6,16 @@ Module under test: src/ccsds_data_messages/io/_utils.py
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC
+from datetime import datetime
 
-from ccsds_data_messages.io._utils import (
-    build_keyword_map,
-    format_ccsds_epoch,
-    format_value,
-    map_kvs,
-)
+from ccsds_data_messages.io._utils import build_keyword_map
+from ccsds_data_messages.io._utils import format_ccsds_epoch
+from ccsds_data_messages.io._utils import format_value
+from ccsds_data_messages.io._utils import map_kvs
 from ccsds_data_messages.models.opm import OPM
-from ccsds_data_messages.models.values import RefFrame, TimeSystem
+from ccsds_data_messages.models.values import RefFrame
+from ccsds_data_messages.models.values import TimeSystem
 
 # ---------------------------------------------------------------------------
 # format_value
@@ -53,7 +53,7 @@ class TestFormatValue:
         assert result == "UTC"
 
     def test_integer_formatted_correctly(self):
-        # §7.5.4: integers are decimal digits, no decimal point
+        # Section 7.5.4: integers are decimal digits, no decimal point
         result = format_value(42)
         assert result == "42"
         assert "." not in result
@@ -70,13 +70,13 @@ class TestFormatValue:
 
 class TestFormatCcsdsEpoch:
     def test_utc_datetime_formatted_as_calendar_string(self):
-        # §7.5.10: calendar format YYYY-MM-DDThh:mm:ss[Z]
+        # Section 7.5.10: calendar format YYYY-MM-DDThh:mm:ss[Z]
         dt = datetime(2021, 3, 15, 12, 0, 0, tzinfo=UTC)
         result = format_ccsds_epoch(dt)
         assert result == "2021-03-15T12:00:00Z"
 
     def test_subseconds_trailing_zeros_stripped(self):
-        # §7.5.10: fractional seconds are optional trailing digits (no trailing zeros)
+        # Section 7.5.10: fractional seconds are optional trailing digits (no trailing zeros)
         dt = datetime(2021, 3, 15, 12, 0, 0, 100000, tzinfo=UTC)
         result = format_ccsds_epoch(dt)
         assert result == "2021-03-15T12:00:00.1Z"
@@ -160,7 +160,7 @@ class TestMapKvs:
         assert "comment" not in result
 
     def test_unknown_keyword_silently_skipped(self):
-        # §7.9.2: unknown keywords should not cause parse failure (forward compat)
+        # Section 7.9.2: unknown keywords should not cause parse failure (forward compat)
         kvs = {"TOTALLY_UNKNOWN_KEY": "some_value"}
         result = map_kvs(kvs, [], OPM.Metadata)
         assert "totally_unknown_key" not in result

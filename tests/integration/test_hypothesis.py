@@ -23,19 +23,19 @@ hypothesis_pydantic = pytest.importorskip(
     "hypothesis.extra.pydantic", reason="hypothesis not installed"
 )
 
-from hypothesis import HealthCheck, given, settings  # noqa: E402
+from hypothesis import HealthCheck  # noqa: E402
+from hypothesis import given  # noqa: E402
+from hypothesis import settings  # noqa: E402
 from hypothesis.extra.pydantic import from_type  # noqa: E402
 
-from ccsds_data_messages import (  # noqa: E402  # noqa: E402
-    OCM,
-    OEM,
-    OMM,
-    OPM,
-    MessageFormat,
-    MessageType,
-    read_string,
-    write_string,
-)
+from ccsds_data_messages import OCM  # noqa: E402  # noqa: E402
+from ccsds_data_messages import OEM  # noqa: E402  # noqa: E402
+from ccsds_data_messages import OMM  # noqa: E402  # noqa: E402
+from ccsds_data_messages import OPM  # noqa: E402  # noqa: E402
+from ccsds_data_messages import MessageFormat  # noqa: E402  # noqa: E402
+from ccsds_data_messages import MessageType  # noqa: E402  # noqa: E402
+from ccsds_data_messages import read_string  # noqa: E402  # noqa: E402
+from ccsds_data_messages import write_string  # noqa: E402  # noqa: E402
 
 # 25 examples is below the Hypothesis minimum for meaningful coverage of constrained schemas.
 _SETTINGS = settings(

@@ -1,49 +1,25 @@
 """
-OCM tests - model validation, spec fixtures (Annex G15-G20), KVN/XML round-trips.
+OCM model-validation and builder unit tests.
 
-Replaces:
-- test_models.py:TestOCM*, TestOCMHeader*, TestOCMMetadata*, TestOCMTopLevel, etc.
-- OCM rows missing from test_spec_fixtures.py (g15-g19 all should now pass)
+Covers header/metadata/data-block construction, pydantic validation errors,
+and the OCMBuilder setters (no serialization).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 import pydantic
 import pytest
-from conftest import (
-    CREATION_DATE,
-    EPOCH,
-    FIXTURES,
-    assert_models_equal,
-    assert_semantic_equal,
-    make_ocm,
-)
+from conftest import CREATION_DATE
+from conftest import EPOCH
+from conftest import make_ocm
 
-from ccsds_data_messages import OCM, read, write
-from ccsds_data_messages.io.kvn.ocm_reader import KVNOCMReader
-from ccsds_data_messages.io.kvn.ocm_writer import KVNOCMWriter
-from ccsds_data_messages.models.values import CenterName, ManeuverPurpose, TimeSystem
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-_OCM_READER = KVNOCMReader()
-_OCM_WRITER = KVNOCMWriter()
-
-_OCM_KVN_SPEC_FIXTURES_PASSING = [
-    "ocm_g15_minimal.kvn",
-    "ocm_g16_characteristics.kvn",
-    "ocm_g17_deployments.kvn",
-    "ocm_g18_multi_traj.kvn",
-    "ocm_g19_covariance_histories.kvn",
-]
-_OCM_KVN_SPEC_FIXTURES_WRITER_GAP: list[str] = []
-_OCM_KVN_SPEC_FIXTURES = (
-    _OCM_KVN_SPEC_FIXTURES_PASSING + _OCM_KVN_SPEC_FIXTURES_WRITER_GAP
-)
-
+from ccsds_data_messages import OCM
+from ccsds_data_messages.models.values import CenterName
+from ccsds_data_messages.models.values import ManeuverBasis
+from ccsds_data_messages.models.values import ManeuverPurpose
+from ccsds_data_messages.models.values import TimeSystem
 
 # ---------------------------------------------------------------------------
 # Model validation
@@ -52,7 +28,7 @@ _OCM_KVN_SPEC_FIXTURES = (
 
 class TestOCMHeader:
     def test_ocm_header_version_mandatory(self):
-        # §7.9.1: CCSDS_OCM_VERS M
+        # Section 7.9.1: CCSDS_OCM_VERS M
         with pytest.raises(pydantic.ValidationError):
             OCM.Header(creation_date=CREATION_DATE, originator="TEST")
 
@@ -100,7 +76,7 @@ class TestOCMMetadata:
         assert meta.time_system == TimeSystem.UTC
 
     def test_ocm_metadata_epoch_tzero_mandatory(self):
-        # §6.2.2.2: EPOCH_TZERO M - no default
+        # Section 6.2.2.2: EPOCH_TZERO M - no default
         with pytest.raises(pydantic.ValidationError):
             OCM.Metadata(time_system=TimeSystem.UTC)
 
@@ -117,7 +93,7 @@ class TestOCMMetadata:
         assert meta.epoch_tzero is not None
 
     def test_ocm_metadata_julian_date_epoch_tzero_rejected(self):
-        # epoch_tzero is absolute-only (CCSDSDate); §7.5.10 defines only the
+        # epoch_tzero is absolute-only (CCSDSDate); section 7.5.10 defines only the
         # calendar and day-of-year formats, so a bare decimal is rejected.
         with pytest.raises(pydantic.ValidationError):
             OCM.Metadata(time_system=TimeSystem.UTC, epoch_tzero="2459945.5")
@@ -146,7 +122,7 @@ class TestOCMTopLevel:
         assert ocm.header.originator == "JAXA"
 
     def test_ocm_header_plus_metadata_only_accepted(self):
-        # §6.2: header + metadata are the minimum; all data blocks are optional
+        # Section 6.2: header + metadata are the minimum; all data blocks are optional
         ocm = OCM(
             header=OCM.Header(
                 ccsds_ocm_vers="3.0", creation_date=CREATION_DATE, originator="JAXA"
@@ -156,21 +132,21 @@ class TestOCMTopLevel:
         assert ocm.metadata.epoch_tzero is not None
 
     def test_ocm_header_version_3_5_accepted_as_valid_minor_increment(self):
-        # §7.9.1: OCM supports any minor version under major 3
+        # Section 7.9.1: OCM supports any minor version under major 3
         h = OCM.Header(
             ccsds_ocm_vers="3.5", creation_date=CREATION_DATE, originator="TEST"
         )
         assert h.ccsds_ocm_vers == "3.5"
 
     def test_ocm_header_version_4_0_raises_non_3_major(self):
-        # §7.9.1: OCM major version must be 3; '4.0' is not valid
+        # Section 7.9.1: OCM major version must be 3; '4.0' is not valid
         with pytest.raises(pydantic.ValidationError):
             OCM.Header(
                 ccsds_ocm_vers="4.0", creation_date=CREATION_DATE, originator="TEST"
             )
 
     def test_ocm_header_version_2_0_raises_non_3_major(self):
-        # §7.9.1: OCM major version must be 3; '2.0' is not valid
+        # Section 7.9.1: OCM major version must be 3; '2.0' is not valid
         with pytest.raises(pydantic.ValidationError):
             OCM.Header(
                 ccsds_ocm_vers="2.0", creation_date=CREATION_DATE, originator="TEST"
@@ -179,7 +155,7 @@ class TestOCMTopLevel:
 
 class TestOCMTrajectoryState:
     def test_ocm_trajectory_state_data_lines_strictly_increasing(self):
-        # §6.2.2.5: time tags must be strictly increasing within a block
+        # Section 6.2.2.5: time tags must be strictly increasing within a block
         with pytest.raises(pydantic.ValidationError):
             OCM.TrajectoryStateTimeHistory(
                 traj_type="CARTPV",
@@ -191,7 +167,7 @@ class TestOCMTrajectoryState:
             )
 
     def test_ocm_trajectory_state_decreasing_time_raises(self):
-        # §6.2.2.4: duplicate time tag forbidden
+        # Section 6.2.2.4: duplicate time tag forbidden
         with pytest.raises(pydantic.ValidationError):
             OCM.TrajectoryStateTimeHistory(
                 traj_type="CARTPV",
@@ -224,7 +200,7 @@ class TestOCMTrajectoryState:
         assert len(block.data_lines) == 3
 
     def test_ocm_trajectory_empty_data_lines_raises(self):
-        # §6.2.2.5: an empty data block has no meaning
+        # Section 6.2.2.5: an empty data block has no meaning
         with pytest.raises(pydantic.ValidationError):
             OCM.TrajectoryStateTimeHistory(
                 traj_type="CARTPV",
@@ -233,7 +209,7 @@ class TestOCMTrajectoryState:
             )
 
     def test_ocm_trajectory_mixed_absolute_and_relative_tags_raises(self):
-        # §6.2.2.5: a block established as absolute-tagged must not accept a
+        # Section 6.2.2.5: a block established as absolute-tagged must not accept a
         # stray relative-format tag.
         with pytest.raises(pydantic.ValidationError, match=r"section 6\.2\.2\.5"):
             OCM.TrajectoryStateTimeHistory(
@@ -246,7 +222,7 @@ class TestOCMTrajectoryState:
             )
 
     def test_ocm_covariance_mixed_absolute_and_relative_tags_raises(self):
-        # Same §6.2.2.5 check applies to covariance blocks via the same helper.
+        # Same section 6.2.2.5 check applies to covariance blocks via the same helper.
         with pytest.raises(pydantic.ValidationError, match=r"section 6\.2\.2\.5"):
             OCM.CovarianceTimeHistory(
                 data_lines=[
@@ -325,7 +301,7 @@ class TestOCMBuilder:
                 man_ref_frame="RSW",
                 dc_type="CONTINUOUS",
                 man_composition="TIME_ABSOLUTE,MAN_DURA,THR_X,THR_Y,THR_Z",
-                data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+                data_lines=[_prop_row()],
             )
             .build()
         )
@@ -392,7 +368,7 @@ class TestOCMCovarianceTimeHistory:
         assert cov.data_lines == ["2020-001T00:00:00 1e-6"]
 
     def test_decreasing_time_raises(self):
-        # Shares _check_data_lines_ordered with TrajectoryStateTimeHistory (§6.2.7.6/6.2.2.4)
+        # Shares _check_data_lines_ordered with TrajectoryStateTimeHistory (section 6.2.7.6/6.2.2.4)
         with pytest.raises(pydantic.ValidationError):
             OCM.CovarianceTimeHistory(
                 data_lines=[
@@ -419,6 +395,15 @@ class TestOCMCovarianceTimeHistory:
             )
 
 
+_ManLine = OCM.ManeuverSpecification.ManeuverDataLine
+_DeployLine = OCM.ManeuverSpecification.DeploymentDataLine
+
+
+def _prop_row(time_tag: str = "2020-001T00:00:00") -> _ManLine:
+    """A propulsive maneuver row matching the TIME_ABSOLUTE,MAN_DURA,THR_X/Y/Z KW."""
+    return _ManLine(time_tag=time_tag, man_dura=60.0, thr_x=0.0, thr_y=0.001, thr_z=0.0)
+
+
 class TestOCMManeuverSpecification:
     _KW: ClassVar[dict[str, str]] = {
         "man_id": "M001",
@@ -432,64 +417,220 @@ class TestOCMManeuverSpecification:
         with pytest.raises(pydantic.ValidationError):
             OCM.ManeuverSpecification(
                 **{k: v for k, v in self._KW.items() if k != "man_id"},
-                data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+                data_lines=[_prop_row()],
             )
 
     def test_minimal_construction_accepted(self):
-        man = OCM.ManeuverSpecification(
-            **self._KW,
-            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
-        )
+        man = OCM.ManeuverSpecification(**self._KW, data_lines=[_prop_row()])
         assert man.man_id == "M001"
 
     def test_duplicate_time_tag_raises(self):
-        # Uses _check_no_duplicate_time_tags (§6.2.8), not the strict-ordering
+        # Uses _check_no_duplicate_time_tags (section 6.2.8), not the strict-ordering
         # check used by trajectory/covariance blocks.
         with pytest.raises(pydantic.ValidationError):
-            OCM.ManeuverSpecification(
-                **self._KW,
-                data_lines=[
-                    "2020-001T00:00:00 60.0 0.0 0.001 0.0",
-                    "2020-001T00:00:00 60.0 0.0 0.001 0.0",
-                ],
-            )
+            OCM.ManeuverSpecification(**self._KW, data_lines=[_prop_row(), _prop_row()])
 
     def test_decreasing_time_without_duplicate_accepted(self):
         # Unlike trajectory/covariance, maneuver blocks don't require strict ordering.
         man = OCM.ManeuverSpecification(
             **self._KW,
-            data_lines=[
-                "2020-001T00:10:00 60.0 0.0 0.001 0.0",
-                "2020-001T00:00:00 60.0 0.0 0.001 0.0",
-            ],
+            data_lines=[_prop_row("2020-001T00:10:00"), _prop_row("2020-001T00:00:00")],
         )
         assert len(man.data_lines) == 2
 
     def test_man_purpose_accepts_known_enum_value(self):
         man = OCM.ManeuverSpecification(
-            **self._KW,
-            man_purpose=ManeuverPurpose.SK,
-            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+            **self._KW, man_purpose=ManeuverPurpose.SK, data_lines=[_prop_row()]
         )
         assert man.man_purpose == ManeuverPurpose.SK
 
     def test_man_purpose_accepts_grav_assist_parametric_value(self):
         purpose = ManeuverPurpose.grav_assist_from(CenterName.EARTH)
         man = OCM.ManeuverSpecification(
-            **self._KW,
-            man_purpose=purpose,
-            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+            **self._KW, man_purpose=purpose, data_lines=[_prop_row()]
         )
         assert man.man_purpose == "GRAV_ASSIST_FROM_EARTH"
 
     def test_man_purpose_accepts_arbitrary_free_text(self):
         # Table 6-7's vocabulary is "could include", not a closed set.
         man = OCM.ManeuverSpecification(
-            **self._KW,
-            man_purpose="CUSTOM_PURPOSE",
-            data_lines=["2020-001T00:00:00 60.0 0.0 0.001 0.0"],
+            **self._KW, man_purpose="CUSTOM_PURPOSE", data_lines=[_prop_row()]
         )
         assert man.man_purpose == "CUSTOM_PURPOSE"
+
+    def test_typed_row_exposes_named_columns(self):
+        man = OCM.ManeuverSpecification(**self._KW, data_lines=[_prop_row()])
+        row = man.data_lines[0]
+        assert isinstance(row, _ManLine)
+        assert row.man_dura == 60.0
+        assert row.thr_y == pytest.approx(0.001)
+
+    def test_thr_interp_invalid_value_raises(self):
+        # Table 6-8: THR_INTERP values shall be 'ON' or 'OFF'.
+        with pytest.raises(pydantic.ValidationError):
+            _ManLine(time_tag="2020-001T00:00:00", thr_interp="MAYBE")
+
+    def test_deploy_mass_positive_raises(self):
+        # Table 6-9: DEPLOY_MASS is a host-mass decrement and shall be <= 0.0.
+        with pytest.raises(pydantic.ValidationError):
+            _DeployLine(time_tag="0.0", deploy_mass=1.0)
+
+    def test_row_type_mismatched_to_composition_raises(self):
+        # Propulsive composition must take ManeuverDataLine rows (6.2.8.15).
+        with pytest.raises(pydantic.ValidationError):
+            OCM.ManeuverSpecification(
+                **self._KW,
+                data_lines=[_DeployLine(time_tag="0.0", deploy_mass=-1.0)],
+            )
+
+    def test_man_units_count_after_time_tag_accepted(self):
+        # 4 units == elements after the time tag (table 6-7 normative text).
+        man = OCM.ManeuverSpecification(
+            **self._KW, man_units="[s, N, N, N]", data_lines=[_prop_row()]
+        )
+        assert man.man_units == "[s, N, N, N]"
+
+    def test_man_units_count_with_leading_time_unit_accepted(self):
+        # 5 units == full composition (leading n/a for the time tag), the form
+        # used by the CCSDS Annex G page-206 example and the ocm_g17 fixture.
+        man = OCM.ManeuverSpecification(
+            **self._KW, man_units="[n/a, s, N, N, N]", data_lines=[_prop_row()]
+        )
+        assert man.man_units == "[n/a, s, N, N, N]"
+
+    def test_man_units_wrong_count_raises(self):
+        with pytest.raises(pydantic.ValidationError):
+            OCM.ManeuverSpecification(
+                **self._KW,
+                man_units="[s, N]",  # 2 units, need 4 or 5
+                data_lines=[_prop_row()],
+            )
+
+    # DC vector format (section 7.6.1) and execution-window ordering (table 6-7).
+
+    def test_dc_ref_dir_three_numeric_components_accepted(self):
+        man = OCM.ManeuverSpecification(
+            **self._KW, dc_ref_dir="1.0 0.0 0.0", data_lines=[_prop_row()]
+        )
+        assert man.dc_ref_dir == "1.0 0.0 0.0"
+
+    def test_dc_ref_dir_wrong_component_count_raises(self):
+        with pytest.raises(pydantic.ValidationError):
+            OCM.ManeuverSpecification(
+                **self._KW, dc_ref_dir="1.0 0.0", data_lines=[_prop_row()]
+            )
+
+    def test_dc_ref_dir_non_numeric_raises(self):
+        with pytest.raises(pydantic.ValidationError):
+            OCM.ManeuverSpecification(
+                **self._KW, dc_ref_dir="1.0 UP 0.0", data_lines=[_prop_row()]
+            )
+
+    def test_dc_body_trigger_numeric_vector_accepted(self):
+        man = OCM.ManeuverSpecification(
+            **self._KW, dc_body_trigger="0.0 0.0 1.0", data_lines=[_prop_row()]
+        )
+        assert man.dc_body_trigger == "0.0 0.0 1.0"
+
+    def test_dc_exec_start_before_win_open_raises(self):
+        # Both relative (seconds): exec 10 < window open 50 violates table 6-7.
+        with pytest.raises(pydantic.ValidationError):
+            OCM.ManeuverSpecification(
+                **self._KW,
+                dc_win_open="50.0",
+                dc_exec_start="10.0",
+                data_lines=[_prop_row()],
+            )
+
+    def test_dc_exec_stop_after_win_close_raises(self):
+        with pytest.raises(pydantic.ValidationError):
+            OCM.ManeuverSpecification(
+                **self._KW,
+                dc_win_close="100.0",
+                dc_exec_stop="150.0",
+                data_lines=[_prop_row()],
+            )
+
+    def test_dc_execution_within_window_accepted(self):
+        man = OCM.ManeuverSpecification(
+            **self._KW,
+            dc_win_open="0.0",
+            dc_win_close="100.0",
+            dc_exec_start="10.0",
+            dc_exec_stop="90.0",
+            data_lines=[_prop_row()],
+        )
+        assert man.dc_exec_start == "10.0"
+
+    def test_dc_mixed_format_window_not_compared(self):
+        # Relative exec vs absolute window can't be ordered without EPOCH_TZERO,
+        # so the block-level check abstains (no false rejection).
+        man = OCM.ManeuverSpecification(
+            **self._KW,
+            dc_win_open="2020-001T00:00:00",
+            dc_exec_start="10.0",
+            data_lines=[_prop_row()],
+        )
+        assert man.dc_exec_start == "10.0"
+
+
+class TestOCMManeuverDCWindowsAcrossFormats:
+    """
+    OCM-level DC window ordering when exec/window tags mix relative and absolute.
+
+    Same-format pairs are ordered inside ManeuverSpecification; a relative tag
+    paired with an absolute one is resolved against EPOCH_TZERO at the OCM level
+    (table 6-7: DC_EXEC_START >= DC_WIN_OPEN, DC_EXEC_STOP <= DC_WIN_CLOSE).
+    """
+
+    # EPOCH_TZERO defaults to "2020-001T00:00:00" via make_ocm, so relative second
+    # offsets resolve against midnight on day 001.
+    @staticmethod
+    def _maneuver(**dc_kw: str) -> OCM.ManeuverSpecification:
+        return OCM.ManeuverSpecification(
+            man_id="M1",
+            man_device_id="THR1",
+            man_ref_frame="RSW",
+            dc_type="CONTINUOUS",
+            man_composition="TIME_ABSOLUTE,MAN_DURA,THR_X,THR_Y,THR_Z",
+            data_lines=[_prop_row()],
+            **dc_kw,
+        )
+
+    def _ocm(self, man: OCM.ManeuverSpecification) -> OCM:
+        # Build via the constructor (not model_copy) so model validators run.
+        return OCM(
+            header=OCM.Header(
+                ccsds_ocm_vers="3.0", creation_date=CREATION_DATE, originator="JAXA"
+            ),
+            metadata=OCM.Metadata(time_system=TimeSystem.UTC, epoch_tzero=EPOCH),
+            maneuvers=[man],
+        )
+
+    def test_mixed_format_exec_start_before_window_open_raises(self):
+        # exec_start absolute 00:00:50 (=50 s) < win_open relative 100 s, which is a violation.
+        man = self._maneuver(dc_win_open="100.0", dc_exec_start="2020-001T00:00:50")
+        with pytest.raises(pydantic.ValidationError):
+            self._ocm(man)
+
+    def test_mixed_format_exec_stop_after_window_close_raises(self):
+        # exec_stop absolute 00:02:00 (=120 s) > win_close relative 100 s, which is a violation.
+        man = self._maneuver(dc_win_close="100.0", dc_exec_stop="2020-001T00:02:00")
+        with pytest.raises(pydantic.ValidationError):
+            self._ocm(man)
+
+    def test_mixed_format_execution_within_window_accepted(self):
+        man = self._maneuver(
+            dc_win_open="100.0",
+            dc_exec_start="2020-001T00:02:00",  # 120 s >= 100 s
+        )
+        ocm = self._ocm(man)
+        assert ocm.maneuvers is not None
+
+    def test_maneuver_alone_does_not_order_mixed_pair(self):
+        # Standalone (no EPOCH_TZERO context) the block abstains on mixed formats.
+        man = self._maneuver(dc_win_open="100.0", dc_exec_start="2020-001T00:00:50")
+        assert man.dc_exec_start == "2020-001T00:00:50"
 
 
 class TestOCMPerturbationsSpecification:
@@ -514,7 +655,7 @@ class TestOCMOrbitDeterminationData:
         assert od.od_id == "OD1"
 
     def test_seven_digit_relative_od_epoch_accepted(self):
-        # od_epoch is a TimeTag (§6.2.2.3): a relative time in seconds is valid
+        # od_epoch is a TimeTag (section 6.2.2.3): a relative time in seconds is valid
         # regardless of its digit count, e.g. ~28.5 days after EPOCH_TZERO.
         od = OCM.OrbitDeterminationData(
             od_id="OD1", od_method="RANGE", od_epoch="2459945.5"
@@ -528,188 +669,47 @@ class TestOCMUserDefinedParameters:
         assert udp.user_defined["EARTH_MODEL"] == "WGS-84"
 
 
-# ---------------------------------------------------------------------------
-# Spec fixture round-trips (Annex G15-G19, KVN - should pass)
-# ---------------------------------------------------------------------------
+class TestOCMCompositeManeuverGroups:
+    """composite_maneuver_groups groups constituents by MAN_ID/BASIS/REF_FRAME (section 6.2.8.11)."""
 
+    @staticmethod
+    def _man(
+        man_id: str,
+        man_ref_frame: str = "RSW",
+        man_basis: ManeuverBasis = ManeuverBasis.PLANNED,
+    ) -> OCM.ManeuverSpecification:
+        return OCM.ManeuverSpecification(
+            man_id=man_id,
+            man_device_id="THR1",
+            man_ref_frame=man_ref_frame,
+            man_basis=man_basis,
+            dc_type="CONTINUOUS",
+            man_composition="TIME_ABSOLUTE,MAN_DURA,THR_X,THR_Y,THR_Z",
+            data_lines=[_prop_row()],
+        )
 
-@pytest.mark.parametrize("name", _OCM_KVN_SPEC_FIXTURES_PASSING)
-def test_ocm_kvn_spec_fixture_round_trip(name: str, tmp_path: Path) -> None:
-    """Read spec fixture → write → semantic-diff → re-read. (CCSDS 502.0-B-3 Annex G)"""
-    fixture = FIXTURES / name
-    assert fixture.exists(), f"Fixture not found: {fixture}"
-    model_a = read(fixture, fmt="kvn", message_type="ocm")
-    out = tmp_path / name
-    write(model_a, out)
-    assert_semantic_equal(fixture, out, "kvn")
-    model_b = read(out, fmt="kvn", message_type="ocm")
-    assert_models_equal(model_a, model_b)
-
-
-@pytest.mark.parametrize("name", _OCM_KVN_SPEC_FIXTURES_WRITER_GAP)
-def test_ocm_kvn_spec_fixture_round_trip_writer_gap(name: str, tmp_path: Path) -> None:
-    """Placeholder: all g16-g19 writer gaps are now closed (list is empty)."""
-    fixture = FIXTURES / name
-    assert fixture.exists(), f"Fixture not found: {fixture}"
-    model_a = read(fixture, fmt="kvn", message_type="ocm")
-    out = tmp_path / name
-    write(model_a, out)
-    assert_semantic_equal(fixture, out, "kvn")
-    model_b = read(out, fmt="kvn", message_type="ocm")
-    assert_models_equal(model_a, model_b)
-
-
-# ---------------------------------------------------------------------------
-# OCM fixture readability - distinct from round-trip tests above
-#
-# These tests assert only that fixtures can be *read* and that write→read
-# produces a semantically equal model.  They do NOT assert that the writer
-# output matches the original file (that is the xfail round-trip concern).
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("name", _OCM_KVN_SPEC_FIXTURES_WRITER_GAP)
-def test_ocm_kvn_spec_fixture_can_be_read(name: str) -> None:
-    """
-    OCM spec fixtures G16-G19 must be parseable without error.
-
-    These contain physical properties, deployments, multi-trajectory blocks,
-    and covariance histories - all sections the reader must handle.
-    """
-    fixture = FIXTURES / name
-    assert fixture.exists(), f"Fixture not found: {fixture}"
-    model = read(fixture, fmt="kvn", message_type="ocm")
-    assert model is not None
-    assert model.header is not None
-    assert model.metadata is not None
-
-
-@pytest.mark.parametrize("name", _OCM_KVN_SPEC_FIXTURES_WRITER_GAP)
-def test_ocm_kvn_spec_fixture_re_read_preserves_model(name: str, tmp_path: Path) -> None:
-    """
-    Read G16-G19 fixture → write → re-read must yield an equal model.
-
-    A failure here means the writer silently drops or corrupts fields that
-    the reader parsed, which is a distinct bug from the semantic-diff failure
-    already captured by test_ocm_kvn_spec_fixture_round_trip_writer_gap.
-    """
-    fixture = FIXTURES / name
-    model_a = read(fixture, fmt="kvn", message_type="ocm")
-    out = tmp_path / name
-    write(model_a, out)
-    model_b = read(out, fmt="kvn", message_type="ocm")
-    assert_models_equal(model_a, model_b)
-
-
-@pytest.mark.xfail(reason="OCM XML reader not yet exercised in CI fixtures", strict=True)
-def test_ocm_xml_spec_fixture_g20(tmp_path: Path) -> None:
-    fixture = FIXTURES / "ocm_g20.xml"
-    model_a = read(fixture, fmt="xml", message_type="ocm")
-    out = tmp_path / "ocm_g20.xml"
-    write(model_a, out, fmt="xml")
-    assert_semantic_equal(fixture, out, "xml")
-
-
-@pytest.mark.xfail(reason="NDM combined format not supported", strict=False)
-def test_ndm_g21_combined_omm_round_trip(tmp_path: Path) -> None:
-    fixture = FIXTURES / "ndm_g21_combined_omm.xml"
-    model_a = read(fixture, fmt="xml", message_type="omm")
-    out = tmp_path / "ndm_g21.xml"
-    write(model_a, out, fmt="xml")
-
-
-@pytest.mark.xfail(reason="NDM combined format not supported", strict=False)
-def test_ndm_g22_combined_all_round_trip(tmp_path: Path) -> None:
-    fixture = FIXTURES / "ndm_g22_combined_all.xml"
-    read(fixture)
-
-
-# ---------------------------------------------------------------------------
-# KVN round-trips (programmatic)
-# ---------------------------------------------------------------------------
-
-
-class TestOCMKVNRoundTrip:
-    def test_minimal_header_metadata(self, tmp_path: Path) -> None:
-        """Minimal OCM (header + metadata only) round-trips correctly."""
-        ocm = make_ocm()
-        path = tmp_path / "test.ocm"
-        write(ocm, path)
-        back = read(path, message_type="ocm")
-        assert back.header.ccsds_ocm_vers == ocm.header.ccsds_ocm_vers
-        assert back.metadata.time_system == ocm.metadata.time_system
-        assert back.metadata.epoch_tzero == ocm.metadata.epoch_tzero
-
-    def test_with_trajectory_block(self, tmp_path: Path) -> None:
-        """OCM with one trajectory block round-trips."""
-        ocm = OCM(
+    @staticmethod
+    def _ocm(maneuvers: list[OCM.ManeuverSpecification]) -> OCM:
+        return OCM(
             header=OCM.Header(
-                ccsds_ocm_vers="3.0", creation_date=CREATION_DATE, originator="TEST"
+                ccsds_ocm_vers="3.0", creation_date=CREATION_DATE, originator="JAXA"
             ),
             metadata=OCM.Metadata(time_system=TimeSystem.UTC, epoch_tzero=EPOCH),
-            trajectory_states=[
-                OCM.TrajectoryStateTimeHistory(
-                    traj_type="CARTPV",
-                    traj_id="PLAN_A",
-                    data_lines=[
-                        "2020-001T00:00:00 7000.0 0.0 0.0 0.0 7.5 0.0",
-                        "2020-001T00:10:00 6990.0 0.0 0.0 0.0 7.5 0.0",
-                    ],
-                )
-            ],
+            maneuvers=maneuvers,
         )
-        path = tmp_path / "test.ocm"
-        write(ocm, path)
-        back = read(path, message_type="ocm")
-        assert back.trajectory_states is not None
-        assert len(back.trajectory_states) == 1
-        assert back.trajectory_states[0].traj_id == "PLAN_A"
 
-    def test_multi_traj_blocks(self, tmp_path: Path) -> None:
-        """OCM with two trajectory blocks (G-18 pattern)."""
-        ocm = OCM(
-            header=OCM.Header(
-                ccsds_ocm_vers="3.0", creation_date=CREATION_DATE, originator="TEST"
-            ),
-            metadata=OCM.Metadata(time_system=TimeSystem.UTC, epoch_tzero=EPOCH),
-            trajectory_states=[
-                OCM.TrajectoryStateTimeHistory(
-                    traj_type="CARTPV",
-                    traj_id="PLAN_A",
-                    data_lines=["2020-001T00:00:00 7000.0 0.0 0.0 0.0 7.5 0.0"],
-                ),
-                OCM.TrajectoryStateTimeHistory(
-                    traj_type="CARTPV",
-                    traj_id="PLAN_B",
-                    data_lines=["2020-001T01:00:00 6990.0 0.0 0.0 0.0 7.5 0.0"],
-                ),
-            ],
+    def test_groups_constituents_sharing_id_basis_frame(self):
+        ocm = self._ocm([self._man("M1"), self._man("M1"), self._man("M2")])
+        groups = ocm.composite_maneuver_groups()
+        assert len(groups) == 2
+        assert [len(g) for g in groups] == [2, 1]
+        assert {g[0].man_id for g in groups} == {"M1", "M2"}
+
+    def test_different_ref_frame_separates_groups(self):
+        ocm = self._ocm(
+            [self._man("M1", man_ref_frame="RSW"), self._man("M1", man_ref_frame="TNW")]
         )
-        path = tmp_path / "test.ocm"
-        write(ocm, path)
-        back = read(path, message_type="ocm")
-        assert back.trajectory_states is not None
-        assert len(back.trajectory_states) == 2
-        assert back.trajectory_states[1].traj_id == "PLAN_B"
+        assert len(ocm.composite_maneuver_groups()) == 2
 
-    def test_idempotent(self, tmp_path: Path) -> None:
-        """Write → read → write produces identical KVN output."""
-        ocm = make_ocm()
-        first = _OCM_WRITER.write_string(ocm)
-        second = _OCM_WRITER.write_string(_OCM_READER.read_string(first))
-        assert first == second
-
-
-# ---------------------------------------------------------------------------
-# XML round-trips
-# ---------------------------------------------------------------------------
-
-
-class TestOCMXMLRoundTrip:
-    def test_minimal(self, tmp_path: Path) -> None:
-        """Minimal OCM XML round-trip."""
-        ocm = make_ocm()
-        path = tmp_path / "test.xml"
-        write(ocm, path, fmt="xml")
-        back = read(path, fmt="xml", message_type="ocm")
-        assert back.header.originator == ocm.header.originator
+    def test_no_maneuvers_returns_empty(self):
+        assert make_ocm().composite_maneuver_groups() == []
