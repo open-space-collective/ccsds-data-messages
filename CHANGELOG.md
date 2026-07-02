@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-02
+
 ### Added
 
 - OPM, OMM, OEM, and OCM domain models (CCSDS 502.0-B-3) as immutable, validated
@@ -20,3 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reader/writer registry and port protocols for extending the library with
   additional formats or message types.
 - `oem_to_tracss_ocm` conversion from OEM to a TraCSS-compliant OCM.
+
+[Unreleased]: https://github.com/open-space-collective/orbit-data-messages/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/open-space-collective/orbit-data-messages/releases/tag/v0.1.0

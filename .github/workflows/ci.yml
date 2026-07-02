@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  check:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,20 +16,35 @@ jobs:
           enable-caching: true
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-extras --all-groups
 
       - name: Lint
-        run: uv run ruff check .
+        run: make lint
 
       - name: Format check
-        run: uv run ruff format --check .
+        run: make format-check
 
       - name: Type check
-        run: uv run mypy -p ccsds_data_messages
+        run: make typecheck
 
       - name: Pylint
-        run: uv run pylint ccsds_data_messages
+        run: make pylint
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-caching: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --all-groups --python ${{ matrix.python-version }}
 
       - name: Test
-        run: uv run pytest
-
+        run: make test

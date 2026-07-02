@@ -1,14 +1,16 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "ccsds-data-messages"
-version = "0.1.0"
+dynamic = ["version"]
 description = "CCSDS data messages (ODM, CDM) - read, write, and construct OPM, OMM, OEM, OCM in KVN and XML formats."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
+authors = [{ name = "Loft Orbital Solutions Inc." }]
+maintainers = [{ name = "Loft Orbital Solutions Inc." }]
 keywords = [
     "ccsds",
     "orbit",
@@ -43,12 +45,17 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/open-space-collective/orbit-data-messages"
 Source = "https://github.com/open-space-collective/orbit-data-messages"
+Documentation = "https://open-space-collective.github.io/orbit-data-messages/"
 Issues = "https://github.com/open-space-collective/orbit-data-messages/issues"
+Changelog = "https://github.com/open-space-collective/orbit-data-messages/blob/main/CHANGELOG.md"
 
 
 [[tool.uv.index]]
 url = "https://pypi.org/simple"
 default = true
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ccsds_data_messages"]
@@ -139,8 +146,6 @@ ignore = [
     # Relative imports from parent modules - standard Python subpackage pattern
     "TID252",
 
-    # Ambiguous Unicode characters - Greek letters are intentional in CCSDS context
-    "RUF001",
 
     # Style preferences
     "EM",      # flake8-errmsg (verbose error message strings)
@@ -174,8 +179,6 @@ ignore = [
     # Importing private helpers from own package submodules is intentional
     "PLC2701", # private-name-import
 
-    # Ambiguous unicode in docstrings (× is multiplication, same intent as RUF001)
-    "RUF002",
 
     # Consistent with other PLR thresholds ignored above
     "PLR0911", # too-many-return-statements
@@ -195,12 +198,26 @@ ignore = [
     "N999",    # module name (snake_case is intentional)
 ]
 
+[tool.ruff.lint.isort]
+force-single-line = true
+
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = [
     "RUF067",  # __init__ may define TypeAlias re-exports, not just bare imports
 ]
 "scripts/**" = [
     "INP001",  # standalone CLI scripts, not part of the ccsds_data_messages package
+]
+"docs/conf.py" = [
+    "INP001",  # Sphinx configuration file, not part of any package
+]
+"src/ccsds_data_messages/models/values.py" = [
+    # CCSDS SANA registry organization names are data, not prose: some carry accented
+    # letters and smart quotes (for example "Airbus Defence & Space" or a quoted agency
+    # name) that must match the spec verbatim. These are the only non-ASCII characters
+    # allowed in the codebase.
+    "RUF001",  # ambiguous-unicode in string literals
+    "RUF002",  # ambiguous-unicode in docstrings
 ]
 "src/ccsds_data_messages/models/message.py" = [
     # __new__(cls, *args, **kwargs) intentionally accepts but doesn't forward
@@ -242,6 +259,12 @@ dev = [
     "pytest-cov~=5.0",
     "ruff>=0.4",
     "types-defusedxml>=0.7.0.20260504",
+]
+docs = [
+    "sphinx>=7",
+    "sphinx-rtd-theme>=2",   # the Read the Docs theme used for the published site
+    "myst-parser>=3",        # lets the Markdown pages (design, disclaimer, changelog, gaps) render
+    "autodoc-pydantic>=2",   # renders the large nested Pydantic v2 message models cleanly
 ]
 
 [tool.pylint]

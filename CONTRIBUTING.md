@@ -31,7 +31,7 @@ All checks must pass before a PR is merged. CI runs the same `make check` sequen
 
 1. Fork the repo and create a branch from `main`.
 2. Make your change. If it touches the spec compliance layer, add or update a fixture
-   in `tests/fixtures/` and a parametrized case in `tests/test_spec_conformance.py`.
+   in `tests/fixtures/` and a parametrized case in `tests/integration/test_spec_conformance.py`.
    Some tests in that file are marked `# GAP` — they document a spec requirement the
    code doesn't yet meet and are *expected* to fail. Do not add `xfail` to a gap test;
    the failure is the signal that the gap still exists.
