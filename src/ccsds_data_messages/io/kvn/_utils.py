@@ -8,11 +8,17 @@ Generic model-introspection utilities (``build_keyword_map()``, ``map_kvs()``,
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import NamedTuple
+from typing import Protocol
 
-from ccsds_data_messages.io._utils import build_keyword_map, format_value, map_kvs
+from ccsds_data_messages.io._utils import build_keyword_map
+from ccsds_data_messages.io._utils import format_value
+from ccsds_data_messages.io._utils import map_kvs
 from ccsds_data_messages.io.options import WriterOptions
-from ccsds_data_messages.models._fields import Delineation, FieldMetadata
+from ccsds_data_messages.models._fields import Delineation
+from ccsds_data_messages.models._fields import FieldMetadata
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -28,7 +34,6 @@ __all__ = [
     "build_keyword_map",
     "emit_block",
     "emit_kvs",
-    "emit_user_defined",
     "field_keyword",
     "format_value",
     "get_delineation",
@@ -103,12 +108,12 @@ class _LineGuardedWriter:
             if self._max_line_length is not None and len(line) > self._max_line_length:
                 raise ValueError(
                     f"KVN line is {len(line)} characters, exceeding the "
-                    f"{self._max_line_length}-character limit (§7.3.2): {line[:80]!r}..."
+                    f"{self._max_line_length}-character limit (section 7.3.2): {line[:80]!r}..."
                 )
             if bad_chars := sorted(set(_NON_PRINTABLE_ASCII_RE.findall(line))):
                 raise ValueError(
                     f"KVN line contains non-printable-ASCII or control characters "
-                    f"{bad_chars!r} (§7.3.4): {line[:80]!r}..."
+                    f"{bad_chars!r} (section 7.3.4): {line[:80]!r}..."
                 )
         return self._out.write(text)
 
@@ -130,8 +135,8 @@ def guard_lines(
 
     Args:
         out: The underlying text stream to wrap.
-        max_line_length: Maximum permitted line length (§7.3.2: 254 for
-            OPM/OMM/OEM). Pass None for formats with no limit, e.g. OCM (§7.3.3).
+        max_line_length: Maximum permitted line length (section 7.3.2: 254 for
+            OPM/OMM/OEM). Pass None for formats with no limit, e.g. OCM (section 7.3.3).
 
     Returns:
         A ``TextIO``-compatible object; callers can use it as a drop-in
@@ -273,17 +278,6 @@ class _Entry(NamedTuple):
     is_comment: bool = False
 
 
-def emit_user_defined(
-    user_defined_parameters: dict[str, str],
-    output: SupportsWrite,
-) -> None:
-    """Emit ``USER_DEFINED_x = value`` lines for a user-defined parameters dict."""
-    output.writelines(
-        f"USER_DEFINED_{suffix} = {value}\n"
-        for suffix, value in user_defined_parameters.items()
-    )
-
-
 def emit_kvs(
     model: BaseModel,
     out: SupportsWrite,
@@ -310,7 +304,7 @@ def emit_kvs(
     field_to_keyword: dict[str, str] = {fn: kw for kw, fn in keyword_map.items()}
     opts = options if options is not None else WriterOptions()
     align: bool = opts.align_keywords
-    suppress: bool = opts.suppress_defaults
+    suppress: bool = bool(opts.suppress_defaults)
 
     # Phase 1: collect entries.
     # entries: pending KEYWORD = value / COMMENT lines, in declaration order.
@@ -322,12 +316,11 @@ def emit_kvs(
         if (value := getattr(model, field_name)) is None:
             continue
         if suppress:
-            # Currently unreachable with a distinct effect: every optional field's
-            # Python default is None, and None values are already skipped above,
-            # so `not in model_fields_set` never fires for a non-None value today.
-            # Kept for correctness if a future field gains a non-None default.
+            # (a) A field with a non-None Python default (e.g. OCM's
+            # TIME_SYSTEM = UTC) that the source omitted: not in model_fields_set.
             if field_name not in model.model_fields_set:
                 continue
+            # (b) A field explicitly set to its CCSDS spec-defined default.
             spec_default = next(
                 (
                     m.spec_default
@@ -389,7 +382,7 @@ def emit_kvs(
 
     for keyword, value, spec, is_comment in entries:
         if is_comment:
-            # section 7.8.5: every comment line begins with the COMMENT keyword.
+            # Section 7.8.5: every comment line begins with the COMMENT keyword.
             out.write(f"COMMENT {value}\n")
         else:
             padded_keyword: str = f"{keyword:{max_width}}" if align else keyword

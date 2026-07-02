@@ -24,14 +24,23 @@ Consolidates the common building blocks used across CCSDS data messages:
 
 from __future__ import annotations
 
-from typing import Annotated, ClassVar
+from typing import Annotated
+from typing import ClassVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import model_validator
 
-from ._aliases import Comment, CreationDate, OptionalCCSDSDate
+from ._aliases import Comment
+from ._aliases import CreationDate
+from ._aliases import OptionalCCSDSDate
 from ._fields import FieldMetadata
 from .message import CCSDS_MODEL_CONFIG
-from .values import CenterName, ManCovRefFrame, Organization, RefFrame, TimeSystem
+from .values import CenterName
+from .values import ManCovRefFrame
+from .values import Organization
+from .values import RefFrame
+from .values import TimeSystem
 
 # Reference frames for which the REF_FRAME_EPOCH metadata keyword is not required
 # per the CCSDS specification.
@@ -275,8 +284,10 @@ class BaseCovarianceMatrix(BaseModel):
     6 by 6 lower-triangular position/velocity covariance matrix.
 
     All-or-nothing block: if this model is present, all 21 lower-triangular elements
-    are required. COV_REF_FRAME may be omitted when it equals the metadata REF_FRAME;
-    that cross-block check is left to the enclosing data message model.
+    are required. COV_REF_FRAME is optional: it may legitimately differ from the
+    metadata REF_FRAME, and when omitted the covariance is taken to be expressed in
+    REF_FRAME. No equality constraint applies - the keyword exists precisely to
+    allow a different frame (CCSDS 502.0-B-3, e.g. OEM 5.2.5.3).
 
     Units: km**2 (position/position), km**2/s (position/velocity),
     km**2/s**2 (velocity/velocity). Values should be expressed in standard double

@@ -35,23 +35,22 @@ section 8.11.15: <trajLine>, <covLine>, <manLine> elements hold raw data strings
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from typing import Any
 
-from ccsds_data_messages.io.xml._utils import (
-    _TAG_BODY,
-    _TAG_DATA,
-    _TAG_SEGMENT,
-    get_xml_line_tag,
-    get_xml_tag,
-    read_model,
-)
-from ccsds_data_messages.io.xml.parser import (
-    find_all,
-    find_child,
-    get_text,
-    parse_xml_file,
-    parse_xml_string,
-)
+from ccsds_data_messages.exceptions import ParseError
+from ccsds_data_messages.io._ocm_maneuver import parse_maneuver_rows
+from ccsds_data_messages.io.xml._utils import _TAG_BODY
+from ccsds_data_messages.io.xml._utils import _TAG_DATA
+from ccsds_data_messages.io.xml._utils import _TAG_SEGMENT
+from ccsds_data_messages.io.xml._utils import get_xml_line_tag
+from ccsds_data_messages.io.xml._utils import get_xml_tag
+from ccsds_data_messages.io.xml._utils import read_model
+from ccsds_data_messages.io.xml.parser import find_all
+from ccsds_data_messages.io.xml.parser import find_child
+from ccsds_data_messages.io.xml.parser import get_text
+from ccsds_data_messages.io.xml.parser import parse_xml_file
+from ccsds_data_messages.io.xml.parser import parse_xml_string
 from ccsds_data_messages.models.ocm import OCM
 
 if TYPE_CHECKING:
@@ -78,11 +77,19 @@ def _read_block_with_lines(
         the raw line element texts (section 8.11.15).
     """
     kwargs = read_model(element, model_class)
-    # section 8.11.15: data line elements hold raw strings verbatim.
-    kwargs["data_lines"] = [
+    # Section 8.11.15: data line elements hold raw strings verbatim.
+    raw_lines: list[str] = [
         get_text(line_element)
         for line_element in find_all(element, get_xml_line_tag(model_class))
     ]
+    # Maneuver rows are typed (parsed by MAN_COMPOSITION); trajectory/covariance
+    # rows stay raw strings (registry-driven column schema).
+    if model_class is OCM.ManeuverSpecification:
+        if (composition := kwargs.get("man_composition")) is None:
+            raise ParseError("OCM/XML: <man> block is missing MAN_COMPOSITION.")
+        kwargs["data_lines"] = parse_maneuver_rows(composition, raw_lines)
+    else:
+        kwargs["data_lines"] = raw_lines
     return kwargs
 
 

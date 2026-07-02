@@ -36,19 +36,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ccsds_data_messages.exceptions import ParseError
-from ccsds_data_messages.io.xml._utils import (
-    _TAG_BODY,
-    _TAG_DATA,
-    get_xml_tag,
-    read_model,
-)
-from ccsds_data_messages.io.xml.parser import (
-    find_all,
-    find_child,
-    parse_xml_file,
-    parse_xml_string,
-    strip_ns,
-)
+from ccsds_data_messages.io.xml._utils import _TAG_BODY
+from ccsds_data_messages.io.xml._utils import _TAG_DATA
+from ccsds_data_messages.io.xml._utils import get_xml_tag
+from ccsds_data_messages.io.xml._utils import read_model
+from ccsds_data_messages.io.xml.parser import find_all
+from ccsds_data_messages.io.xml.parser import find_child
+from ccsds_data_messages.io.xml.parser import parse_xml_file
+from ccsds_data_messages.io.xml.parser import parse_xml_string
+from ccsds_data_messages.io.xml.parser import strip_ns
 from ccsds_data_messages.models.oem import OEM
 
 if TYPE_CHECKING:

@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Annotated, Any, ClassVar
+from datetime import UTC
+from datetime import datetime
+from typing import Annotated
+from typing import Any
+from typing import ClassVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import model_validator
 
-from ._aliases import CCSDSDate, Comment, OMMVersionStr
-from ._base import (
-    BaseCovarianceMatrix,
-    BaseHeader,
-    BaseMetadata,
-    BaseSpacecraftParameters,
-)
+from ._aliases import CCSDSDate
+from ._aliases import Comment
+from ._aliases import OMMVersionStr
+from ._base import BaseCovarianceMatrix
+from ._base import BaseHeader
+from ._base import BaseMetadata
+from ._base import BaseSpacecraftParameters
 from ._fields import FieldMetadata
 from ._validators import _validate_un_oosa_designator
-from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
-from .values import CenterName, MeanElementTheory, RefFrame, TimeSystem
+from .message import CCSDS_MODEL_CONFIG
+from .message import CCSDSDataMessage
+from .values import CenterName
+from .values import MeanElementTheory
+from .values import RefFrame
+from .values import TimeSystem
 
 # Frames whose epoch is intrinsic to the frame definition.
 # TEME is included here because for OMMs it is always "TEME of Date"
@@ -54,9 +63,10 @@ class OMM(CCSDSDataMessage, BaseModel):
     values in an OMM.
 
     The use of the OMM is best applicable under the following conditions:
+
     - an orbit propagator consistent with the models used to develop the orbit data
       should be run at the receiver's site;
-    - the receive's modeling of gravitational forces, solar radiation pressure,
+    - the receiver's modeling of gravitational forces, solar radiation pressure,
       atmospheric drag, etc., should fulfill accuracy requirements established between
       the exchange partners.
     """
@@ -140,22 +150,22 @@ class OMM(CCSDSDataMessage, BaseModel):
 
         @model_validator(mode="after")
         def validate_tle_theory_requires_teme(self) -> OMM.Metadata:
-            """§4.2.4.6: SGP/SGP4 theories require REF_FRAME=TEME, CENTER_NAME=EARTH, TIME_SYSTEM=UTC, and a UN OOSA designator-format OBJECT_ID."""
+            """Section 4.2.4.6: SGP/SGP4 theories require REF_FRAME=TEME, CENTER_NAME=EARTH, TIME_SYSTEM=UTC, and a UN OOSA designator-format OBJECT_ID."""
             if self.mean_element_theory in _MEAN_ELEMENT_THEORY_REQUIRING_TLE:
                 if self.ref_frame != RefFrame.TEME:
                     raise ValueError(
                         f"MEAN_ELEMENT_THEORY={self.mean_element_theory} requires REF_FRAME=TEME "
-                        f"(§4.2.4.6); got REF_FRAME={self.ref_frame}."
+                        f"(section 4.2.4.6); got REF_FRAME={self.ref_frame}."
                     )
                 if self.center_name != CenterName.EARTH:
                     raise ValueError(
                         f"MEAN_ELEMENT_THEORY={self.mean_element_theory} requires CENTER_NAME=EARTH "
-                        f"(§4.2.4.6); got CENTER_NAME={self.center_name}."
+                        f"(section 4.2.4.6); got CENTER_NAME={self.center_name}."
                     )
                 if self.time_system != TimeSystem.UTC:
                     raise ValueError(
                         f"MEAN_ELEMENT_THEORY={self.mean_element_theory} requires TIME_SYSTEM=UTC "
-                        f"(§4.2.4.6); got TIME_SYSTEM={self.time_system}."
+                        f"(section 4.2.4.6); got TIME_SYSTEM={self.time_system}."
                     )
                 _validate_un_oosa_designator(self.object_id)
             return self
@@ -306,15 +316,17 @@ class OMM(CCSDSDataMessage, BaseModel):
                 return self
 
         class SpacecraftParameters(BaseSpacecraftParameters):
-            """Shared with OPM; see ``models/common/spacecraft.py`` for the full definition."""
+            """Shared with OPM; see ``BaseSpacecraftParameters`` in models/_base.py."""
 
         class TLERelatedParameters(BaseModel):
             """
             Required when ``MEAN_ELEMENT_THEORY=SGP`` or ``SGP4``.
 
             Exactly one of ``bstar`` or ``bterm`` must be provided, matching the theory:
-              - ``SGP4``  -> ``bstar`` (drag parameter)
-              - ``SGP4-XP`` -> ``bterm`` (ballistic coefficient CDA/m)
+
+            - ``SGP4`` uses ``bstar`` (drag parameter)
+            - ``SGP4-XP`` uses ``bterm`` (ballistic coefficient CDA/m)
+
             ``mean_motion_dot`` is required for ``SGP`` and ``PPT3``.
             ``mean_motion_ddot`` / ``agom`` are conditional on the theory.
             Cross-block enforcement of which fields are required given
@@ -492,7 +504,7 @@ class OMM(CCSDSDataMessage, BaseModel):
                 return self
 
         class CovarianceMatrix(BaseCovarianceMatrix):
-            """Shared with OPM; see ``models/common/covariance.py`` for the full definition."""
+            """Shared with OPM; see ``BaseCovarianceMatrix`` in models/_base.py."""
 
         class UserDefinedParameters(BaseModel):
             """
@@ -540,7 +552,7 @@ class OMM(CCSDSDataMessage, BaseModel):
         covariance_matrix: CovarianceMatrix | None = Field(
             default=None,
             description=(
-                "Position/velocity covariance matrix, 6×6 lower triangular form. "
+                "Position/velocity covariance matrix, 6x6 lower triangular form. "
                 "All-or-nothing block."
             ),
         )

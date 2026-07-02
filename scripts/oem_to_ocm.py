@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import argparse
 
-from ccsds_data_messages import oem_to_tracss_ocm, read_oem, write_ocm
+from ccsds_data_messages import oem_to_tracss_ocm
+from ccsds_data_messages import read_oem
+from ccsds_data_messages import write_ocm
 
 
 def _parse_args() -> argparse.Namespace:

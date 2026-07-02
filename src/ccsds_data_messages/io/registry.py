@@ -14,16 +14,22 @@ Alternatively, third-party adapters can be registered at runtime via ``register_
 from __future__ import annotations
 
 import importlib
-from typing import TYPE_CHECKING, TypeAlias, TypeVar, cast
+from typing import TYPE_CHECKING
+from typing import TypeAlias
+from typing import TypeVar
+from typing import cast
 
 from ccsds_data_messages.exceptions import UnsupportedAdapterError
-from ccsds_data_messages.io._utils import _normalize_fmt, _normalize_type
-from ccsds_data_messages.io.format import MessageFormat, MessageType
+from ccsds_data_messages.io._utils import _normalize_fmt
+from ccsds_data_messages.io._utils import _normalize_type
+from ccsds_data_messages.io.format import MessageFormat
+from ccsds_data_messages.io.format import MessageType
 
 AdapterKey: TypeAlias = tuple[str, str]
 
 if TYPE_CHECKING:
-    from ccsds_data_messages.io.ports import MessageReaderPort, MessageWriterPort
+    from ccsds_data_messages.io.ports import MessageReaderPort
+    from ccsds_data_messages.io.ports import MessageWriterPort
 
     ReaderReference: TypeAlias = str | type[MessageReaderPort]
     WriterReference: TypeAlias = str | type[MessageWriterPort]

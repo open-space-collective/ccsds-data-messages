@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import math
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from typing import Any
 
 from ccsds_data_messages.models._fields import FieldMetadata
 
@@ -118,13 +119,13 @@ def format_value(
         return str(value.value)  # StrEnum.value is the spec-defined string
     if isinstance(value, float):
         if not math.isfinite(value):
-            # §7.5.6/7.5.7 define fixed-point and floating-point values as closed
+            # Section 7.5.6/7.5.7 define fixed-point and floating-point values as closed
             # grammars ("shall consist of" decimal digits, sign, exponent digits) -
             # neither grammar can produce "nan"/"inf"/"-inf", so they have no valid
             # serialization, even though the spec never names NaN/Inf explicitly.
             raise ValueError(
                 f"KVN/XML numeric fields must be finite; got {value!r}. "
-                "Reject NaN/±Inf before writing (no representation under §7.5.6/7.5.7)."
+                "Reject NaN/+/-Inf before writing (no representation under section 7.5.6/7.5.7)."
             )
         # Section 7.5.6-7.5.7: max 16 significant digits. ".15g" gives at most 15,
         # using the shorter of fixed-point or scientific notation.
@@ -144,7 +145,7 @@ def format_ccsds_epoch(dt: datetime, *, include_z: bool = True) -> str:
             not included in the output; callers are responsible for ensuring ``dt``
             is in the correct time scale for the field being serialized.
         include_z (bool): Whether to append the UTC ``Z`` suffix. Defaults to
-            ``True`` per CCSDS §7.5.10 producer guidance. Pass ``False`` only
+            ``True`` per CCSDS section 7.5.10 producer guidance. Pass ``False`` only
             when the downstream consumer is known to not accept the suffix.
 
     Returns:

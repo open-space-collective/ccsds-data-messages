@@ -29,13 +29,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ccsds_data_messages.io.xml._utils import (
-    _TAG_BODY,
-    _TAG_SEGMENT,
-    get_xml_tag,
-    read_model,
-)
-from ccsds_data_messages.io.xml.parser import find_child, parse_xml_file, parse_xml_string
+from ccsds_data_messages.io.xml._utils import _TAG_BODY
+from ccsds_data_messages.io.xml._utils import _TAG_SEGMENT
+from ccsds_data_messages.io.xml._utils import get_xml_tag
+from ccsds_data_messages.io.xml._utils import read_model
+from ccsds_data_messages.io.xml.parser import find_child
+from ccsds_data_messages.io.xml.parser import parse_xml_file
+from ccsds_data_messages.io.xml.parser import parse_xml_string
 from ccsds_data_messages.models.omm import OMM
 
 if TYPE_CHECKING:

@@ -14,22 +14,23 @@ Spec references:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import TypeVar
 
 from pydantic import BaseModel
 
 from ccsds_data_messages.exceptions import ParseError
+from ccsds_data_messages.io._ocm_maneuver import parse_maneuver_rows
 from ccsds_data_messages.io._utils import map_kvs
 from ccsds_data_messages.io.kvn._utils import required_block_delimiter_name
-from ccsds_data_messages.io.kvn.parser import (
-    BlankLine,
-    BlockStartLine,
-    BlockStopLine,
-    CommentLine,
-    DataLine,
-    KeyValueLine,
-    parse_kvn,
-)
+from ccsds_data_messages.io.kvn.parser import BlankLine
+from ccsds_data_messages.io.kvn.parser import BlockStartLine
+from ccsds_data_messages.io.kvn.parser import BlockStopLine
+from ccsds_data_messages.io.kvn.parser import CommentLine
+from ccsds_data_messages.io.kvn.parser import DataLine
+from ccsds_data_messages.io.kvn.parser import KeyValueLine
+from ccsds_data_messages.io.kvn.parser import parse_kvn
 from ccsds_data_messages.models.ocm import OCM
 
 if TYPE_CHECKING:
@@ -59,10 +60,19 @@ def _parse_data_block(
 
     ``block`` must have keys ``"kvs"``, ``"comments"``, and ``"data_lines"``.
     ``data_lines`` holds the verbatim whitespace-separated rows that follow the
-    KV section within the block (TRAJ, COV, MAN sections per spec 6.2.x).
+    KV section within the block. Trajectory (TRAJ) and covariance (COV) rows are
+    kept as raw strings (their column schema is registry-driven via TRAJ_TYPE /
+    COV_TYPE); maneuver (MAN) rows are parsed into typed ``ManeuverDataLine`` /
+    ``DeploymentDataLine`` objects using MAN_COMPOSITION.
     """
     kwargs: dict[str, Any] = map_kvs(block["kvs"], block["comments"], model_class)
-    kwargs["data_lines"] = block.get("data_lines") or []
+    raw_lines: list[str] = block.get("data_lines") or []
+    if model_class is OCM.ManeuverSpecification:
+        if (composition := kwargs.get("man_composition")) is None:
+            raise ParseError("OCM/KVN: MAN block is missing MAN_COMPOSITION.")
+        kwargs["data_lines"] = parse_maneuver_rows(composition, raw_lines)
+    else:
+        kwargs["data_lines"] = raw_lines
     return model_class(**kwargs)
 
 

@@ -10,7 +10,7 @@ Ephemeris data line format (section 5.2.4.1):
   Units: km, km/s, km/s**2 per section 7.7.2.1 - NOT displayed on data lines.
 
 Covariance data format (section 5.2.5.4):
-  Lower-triangular 6×6 matrix, row by row: 1, 2, 3, 4, 5, and 6 values per row.
+  Lower-triangular 6x6 matrix, row by row: 1, 2, 3, 4, 5, and 6 values per row.
   EPOCH and COV_REF_FRAME are KV pairs before the data rows (section 5.2.5.3).
 
 Spec references:
@@ -27,15 +27,13 @@ from __future__ import annotations
 import io
 from typing import TYPE_CHECKING
 
-from ccsds_data_messages.io.kvn._utils import (
-    SupportsWrite,
-    block_start_keyword,
-    emit_block,
-    field_keyword,
-    format_value,
-    get_delineation,
-    guard_lines,
-)
+from ccsds_data_messages.io.kvn._utils import SupportsWrite
+from ccsds_data_messages.io.kvn._utils import block_start_keyword
+from ccsds_data_messages.io.kvn._utils import emit_block
+from ccsds_data_messages.io.kvn._utils import field_keyword
+from ccsds_data_messages.io.kvn._utils import format_value
+from ccsds_data_messages.io.kvn._utils import get_delineation
+from ccsds_data_messages.io.kvn._utils import guard_lines
 from ccsds_data_messages.io.kvn.parser import ODM_MAX_LINE_LENGTH
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.models._fields import FieldMetadata

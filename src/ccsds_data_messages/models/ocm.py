@@ -1,41 +1,52 @@
-# Copyright © Loft Orbital Solutions Inc.
+# Copyright (c) Loft Orbital Solutions Inc.
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
-from typing import Annotated, Any, ClassVar, Literal, TypeVar, cast
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
+from typing import Annotated
+from typing import Any
+from typing import ClassVar
+from typing import Literal
+from typing import TypeVar
+from typing import cast
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import field_validator
+from pydantic import model_validator
 
-from ._aliases import (
-    CCSDSDate,
-    CCSDSTimeTag,
-    Comment,
-    OptionalCCSDSDate,
-    TimeTag,
-    VersionStr,
-)
+from ._aliases import CCSDSDate
+from ._aliases import CCSDSTimeTag
+from ._aliases import Comment
+from ._aliases import OptionalCCSDSDate
+from ._aliases import TimeTag
+from ._aliases import VersionStr
 from ._base import BaseHeader
-from ._epoch import _CCSDS_DATE_RE, _REL_TIME_TAG_RE, _normalize_epoch
-from ._fields import Delineation, FieldMetadata
-from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
-from .values import (
-    CenterName,
-    CovarianceOrdering,
-    CovarianceType,
-    DutyCycleType,
-    ExtendedManCovRefFrame,
-    Interpolation,
-    ManeuverBasis,
-    ManeuverPurpose,
-    ObjectType,
-    OperationalStatus,
-    OrbitalElements,
-    OrbitCategory,
-    RefFrame,
-    ShadowModel,
-    TimeSystem,
-)
+from ._epoch import _CCSDS_DATE_RE
+from ._epoch import _REL_TIME_TAG_RE
+from ._epoch import _normalize_epoch
+from ._epoch import _parse_ccsds_epoch
+from ._fields import Delineation
+from ._fields import FieldMetadata
+from .message import CCSDS_MODEL_CONFIG
+from .message import CCSDSDataMessage
+from .values import CenterName
+from .values import CovarianceOrdering
+from .values import CovarianceType
+from .values import DutyCycleType
+from .values import ExtendedManCovRefFrame
+from .values import Interpolation
+from .values import ManeuverBasis
+from .values import ManeuverPurpose
+from .values import ObjectType
+from .values import OperationalStatus
+from .values import OrbitalElements
+from .values import OrbitCategory
+from .values import RefFrame
+from .values import ShadowModel
+from .values import TimeSystem
 
 _TagKey = TypeVar("_TagKey", float, str)
 
@@ -104,6 +115,43 @@ def _classify_time_tags(tags: list[str], block_name: str) -> list[float] | list[
     return [_normalize_epoch(t) for t in tags]
 
 
+def _compare_same_format_time_tags(a: str, b: str) -> int | None:
+    """
+    Three-way compare two CCSDS time tags, or ``None`` if formats differ.
+
+    Returns -1/0/1 for ``a`` <, ==, > ``b`` when both are relative (numeric
+    seconds) or both absolute (CCSDS dates). Returns ``None`` when one is relative
+    and the other absolute: reconciling those needs EPOCH_TZERO (which lives on
+    OCM.Metadata, not on an individual block), so such pairs cannot be ordered here.
+    """
+    a_rel: bool = _REL_TIME_TAG_RE.fullmatch(a) is not None
+    b_rel: bool = _REL_TIME_TAG_RE.fullmatch(b) is not None
+    if a_rel and b_rel:
+        fa, fb = float(a), float(b)
+        return (fa > fb) - (fa < fb)
+    a_abs: bool = _CCSDS_DATE_RE.fullmatch(a) is not None
+    b_abs: bool = _CCSDS_DATE_RE.fullmatch(b) is not None
+    if a_abs and b_abs:
+        na, nb = _normalize_epoch(a), _normalize_epoch(b)
+        return (na > nb) - (na < nb)
+    return None
+
+
+def _resolve_time_tag(tag: str, epoch_tzero: str) -> datetime:
+    """
+    Resolve an OCM maneuver time tag to an absolute ``datetime``.
+
+    Relative tags (seconds) are offset from ``EPOCH_TZERO``; absolute tags are
+    parsed directly. Used to order DC window/execution tags when they mix formats
+    within one block - same-format pairs are ordered without EPOCH_TZERO inside
+    ``ManeuverSpecification``; mixed pairs are reconciled at the OCM level, where
+    ``EPOCH_TZERO`` is available.
+    """
+    if _REL_TIME_TAG_RE.fullmatch(tag):
+        return _parse_ccsds_epoch(epoch_tzero) + timedelta(seconds=float(tag))
+    return _parse_ccsds_epoch(tag)
+
+
 def _check_data_lines_ordered(data_lines: list[str], block_name: str) -> None:
     """
     Assert that data_lines are strictly increasing by time tag.
@@ -112,9 +160,9 @@ def _check_data_lines_ordered(data_lines: list[str], block_name: str) -> None:
     accordingly (section 6.2.2.5 forbids mixing within a block). Strict ordering
     also enforces the no-duplicate rule of section 6.2.2.4.
 
-    Use this for trajectory and covariance blocks (§6.2.5.6 requires monotonic ordering).
-    For maneuver blocks, use _check_no_duplicate_time_tags instead (§6.2.8 has no
-    ordering requirement - only §6.2.2.4's no-duplicate rule applies).
+    Use this for trajectory and covariance blocks (section 6.2.5.6 requires monotonic ordering).
+    For maneuver blocks, use _check_no_duplicate_time_tags instead (section 6.2.8 has no
+    ordering requirement - only section 6.2.2.4's no-duplicate rule applies).
 
     Args:
         data_lines (list[str]): Raw data lines to validate.
@@ -137,7 +185,7 @@ def _check_data_lines_ordered(data_lines: list[str], block_name: str) -> None:
         _assert_strictly_increasing(cast("list[str]", keys), tags, block_name)
 
 
-def _check_no_duplicate_time_tags(data_lines: list[str], block_name: str) -> None:
+def _check_no_duplicate_time_tags(tags: list[str], block_name: str) -> None:
     """
     Reject duplicate time tags in a data block (section 6.2.2.4).
 
@@ -148,15 +196,15 @@ def _check_no_duplicate_time_tags(data_lines: list[str], block_name: str) -> Non
     section 6.2.8 imposes no ordering requirement on maneuver lines.
 
     Args:
-        data_lines (list[str]): Raw data lines to validate.
+        tags (list[str]): The time-tag token of each data line. Maneuver data is
+            stored as typed rows, so callers pass ``[row.time_tag for row in ...]``.
         block_name (str): Section name used in error messages.
 
     Raises:
         ValueError: If any time tag appears more than once.
     """
-    if len(data_lines) < 2:
+    if len(tags) < 2:
         return
-    tags: list[str] = [line.split()[0] for line in data_lines]
     keys: list[float] | list[str] = _classify_time_tags(tags, block_name)
     if isinstance(keys[0], float):
         _assert_no_duplicates(cast("list[float]", keys), tags, block_name)
@@ -549,7 +597,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 description=(
                     "Time system for all absolute time stamps in this OCM including "
-                    "EPOCH_TZERO. §3.2.3.2/Annex B3 lists the standard set (advisory "
+                    "EPOCH_TZERO. Section 3.2.3.2/Annex B3 lists the standard set (advisory "
                     "'should' language); ICD-specific values are accepted as plain str. "
                     "Default is UTC. If SCLK is selected, SCLK_OFFSET_AT_EPOCH and "
                     "SCLK_SEC_PER_SI_SEC shall be supplied."
@@ -1275,8 +1323,8 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "Drag coefficient 1σ percent uncertainty. [%] "
-                    "Actual 1σ range = (1.0 ± DRAG_UNCERTAINTY/100.0,) * CD_NOM."
+                    "Drag coefficient 1-sigma percent uncertainty. [%] "
+                    "Actual 1-sigma range = (1.0 +/- DRAG_UNCERTAINTY/100.0,) * CD_NOM."
                 ),
             ),
             FieldMetadata(
@@ -1354,7 +1402,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "q1 = e1 * sin(φ/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
+                    "q1 = e1 * sin(phi/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
                     "A value of -999 denotes a tumbling space object."
                 ),
             ),
@@ -1366,7 +1414,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "q2 = e2 * sin(φ/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
+                    "q2 = e2 * sin(phi/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
                     "A value of -999 denotes a tumbling space object."
                 ),
             ),
@@ -1378,7 +1426,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "q3 = e3 * sin(φ/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
+                    "q3 = e3 * sin(phi/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
                     "A value of -999 denotes a tumbling space object."
                 ),
             ),
@@ -1390,7 +1438,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "qc = cos(φ/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
+                    "qc = cos(phi/2,) for rotation from OEB_PARENT_FRAME to OEB frame. "
                     "Made non-negative by convention. "
                     "A value of -999 denotes a tumbling space object."
                 ),
@@ -1594,8 +1642,8 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 description=(
-                    "SRP 1σ percent uncertainty. [%] "
-                    "Actual 1σ range = (1.0 ± SRP_UNCERTAINTY/100.0,) * CR_NOM."
+                    "SRP 1-sigma percent uncertainty. [%] "
+                    "Actual 1-sigma range = (1.0 +/- SRP_UNCERTAINTY/100.0,) * CR_NOM."
                 ),
             ),
             FieldMetadata(
@@ -1611,7 +1659,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Typical (50th percentile,) absolute Visual Magnitude normalized to 1 AU "
-                    "Sun-to-target, 0° phase angle, 40,000 km target-to-sensor distance."
+                    "Sun-to-target, 0 deg phase angle, 40,000 km target-to-sensor distance."
                 ),
             ),
             FieldMetadata(keyword="VM_ABSOLUTE"),
@@ -1763,7 +1811,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             float | None,
             Field(
                 default=None,
-                description="Total ΔV capability at beginning of life. [km/s]",
+                description="Total delta-V capability at beginning of life. [km/s]",
             ),
             FieldMetadata(
                 keyword="DV_BOL",
@@ -1775,7 +1823,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             float | None,
             Field(
                 default=None,
-                description="Total ΔV remaining for the spacecraft. [km/s]",
+                description="Total delta-V remaining for the spacecraft. [km/s]",
             ),
             FieldMetadata(
                 keyword="DV_REMAINING",
@@ -2149,7 +2197,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 and self.cov_scale_min > self.cov_scale_max
             ):
                 raise ValueError(
-                    f"cov_scale_min ({self.cov_scale_min}) must be ≤ "
+                    f"cov_scale_min ({self.cov_scale_min}) must be <= "
                     f"cov_scale_max ({self.cov_scale_max}) (table 6-6)."
                 )
             return self
@@ -2175,11 +2223,12 @@ class OCM(CCSDSDataMessage, BaseModel):
         to the reference frame definition.
 
         DC duty cycle fields are conditional on DC_TYPE (6.2.8.20.6-6.2.8.20.7):
+
         - DC_WIN_OPEN, DC_WIN_CLOSE, DC_EXEC_START, DC_EXEC_STOP, DC_REF_TIME,
           DC_TIME_PULSE_DURATION, DC_TIME_PULSE_PERIOD shall all be set when
-          DC_TYPE ≠ 'CONTINUOUS'.
+          DC_TYPE is not 'CONTINUOUS'.
         - DC_REF_DIR, DC_BODY_FRAME, DC_BODY_TRIGGER, DC_PA_START_ANGLE,
-          DC_PA_STOP_ANGLE additionally required when DC_TYPE = 'TIME_AND_ANGLE'.
+          DC_PA_STOP_ANGLE additionally required when DC_TYPE is 'TIME_AND_ANGLE'.
 
         data_lines contains the raw maneuver lines as specified by MAN_COMPOSITION.
         At least one data line is required.
@@ -2193,6 +2242,103 @@ class OCM(CCSDSDataMessage, BaseModel):
         _delineation: ClassVar[Delineation] = Delineation("MAN_START", "MAN_STOP")
         _xml_tag: ClassVar[str] = "man"
         _xml_line_tag: ClassVar[str] = "manLine"
+
+        class ManeuverDataLine(BaseModel):
+            """
+            One typed propulsive maneuver data line (table 6-8).
+
+            A read-only view over a raw ``data_lines`` entry, built by
+            ``parsed_data_lines()``. Each field carries its CCSDS ``FieldMetadata``
+            keyword, so the parser maps MAN_COMPOSITION columns to fields by
+            introspection - not by hardcoded names. The single time column
+            (TIME_ABSOLUTE or TIME_RELATIVE) maps to ``time_tag``. Only columns named
+            in MAN_COMPOSITION are populated. The two spec ``shall`` constraints are
+            enforced here: THR_INTERP is 'ON'/'OFF' (table 6-8); ACC_INTERP shares
+            that on/off domain (the table lists only those values).
+            """
+
+            model_config = CCSDS_MODEL_CONFIG
+
+            time_tag: str
+            man_dura: Annotated[float | None, FieldMetadata("MAN_DURA", units="s")] = None
+            delta_mass: Annotated[
+                float | None, FieldMetadata("DELTA_MASS", units="kg")
+            ] = None
+            acc_x: Annotated[float | None, FieldMetadata("ACC_X", units="km/s**2")] = None
+            acc_y: Annotated[float | None, FieldMetadata("ACC_Y", units="km/s**2")] = None
+            acc_z: Annotated[float | None, FieldMetadata("ACC_Z", units="km/s**2")] = None
+            acc_interp: Annotated[
+                Literal["ON", "OFF"] | None, FieldMetadata("ACC_INTERP")
+            ] = None
+            acc_mag_sigma: Annotated[
+                float | None, FieldMetadata("ACC_MAG_SIGMA", units="%")
+            ] = None
+            acc_dir_sigma: Annotated[
+                float | None, FieldMetadata("ACC_DIR_SIGMA", units="deg")
+            ] = None
+            dv_x: Annotated[float | None, FieldMetadata("DV_X", units="km/s")] = None
+            dv_y: Annotated[float | None, FieldMetadata("DV_Y", units="km/s")] = None
+            dv_z: Annotated[float | None, FieldMetadata("DV_Z", units="km/s")] = None
+            dv_mag_sigma: Annotated[
+                float | None, FieldMetadata("DV_MAG_SIGMA", units="%")
+            ] = None
+            dv_dir_sigma: Annotated[
+                float | None, FieldMetadata("DV_DIR_SIGMA", units="deg")
+            ] = None
+            thr_x: Annotated[float | None, FieldMetadata("THR_X", units="N")] = None
+            thr_y: Annotated[float | None, FieldMetadata("THR_Y", units="N")] = None
+            thr_z: Annotated[float | None, FieldMetadata("THR_Z", units="N")] = None
+            thr_effic: Annotated[float | None, FieldMetadata("THR_EFFIC")] = None
+            thr_interp: Annotated[
+                Literal["ON", "OFF"] | None, FieldMetadata("THR_INTERP")
+            ] = None
+            thr_isp: Annotated[float | None, FieldMetadata("THR_ISP", units="s")] = None
+            isp: Annotated[float | None, FieldMetadata("ISP", units="s")] = None
+            thr_mag_sigma: Annotated[
+                float | None, FieldMetadata("THR_MAG_SIGMA", units="%")
+            ] = None
+            thr_dir_sigma: Annotated[
+                float | None, FieldMetadata("THR_DIR_SIGMA", units="deg")
+            ] = None
+
+        class DeploymentDataLine(BaseModel):
+            """
+            One typed deployment maneuver data line (table 6-9).
+
+            Read-only view built by ``parsed_data_lines()``; see ``ManeuverDataLine``
+            for the FieldMetadata-driven field convention. The spec ``shall``
+            constraint DEPLOY_MASS <= 0.0 (a decrement in host mass) is enforced
+            here. DEPLOY_ID is free text; the value ``0`` denotes "no deployment".
+            """
+
+            model_config = CCSDS_MODEL_CONFIG
+
+            time_tag: str
+            deploy_id: Annotated[str | None, FieldMetadata("DEPLOY_ID")] = None
+            deploy_dv_x: Annotated[
+                float | None, FieldMetadata("DEPLOY_DV_X", units="km/s")
+            ] = None
+            deploy_dv_y: Annotated[
+                float | None, FieldMetadata("DEPLOY_DV_Y", units="km/s")
+            ] = None
+            deploy_dv_z: Annotated[
+                float | None, FieldMetadata("DEPLOY_DV_Z", units="km/s")
+            ] = None
+            deploy_mass: Annotated[
+                float | None, Field(le=0.0), FieldMetadata("DEPLOY_MASS", units="kg")
+            ] = None
+            deploy_dv_sigma: Annotated[
+                float | None, FieldMetadata("DEPLOY_DV_SIGMA", units="%")
+            ] = None
+            deploy_dir_sigma: Annotated[
+                float | None, FieldMetadata("DEPLOY_DIR_SIGMA", units="deg")
+            ] = None
+            deploy_dv_ratio: Annotated[float | None, FieldMetadata("DEPLOY_DV_RATIO")] = (
+                None
+            )
+            deploy_dv_cda: Annotated[
+                float | None, FieldMetadata("DEPLOY_DV_CDA", units="m**2")
+            ] = None
 
         comment: Comment = None
 
@@ -2262,7 +2408,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             str,
             Field(
                 description=(
-                    "Maneuver device identifier. 'ALL' = summed acceleration/ΔV/thrust of "
+                    "Maneuver device identifier. 'ALL' = summed acceleration/delta-V/thrust of "
                     "any/all thrusters. 'DEPLOY' = maneuvers caused by deployments only. "
                     "Otherwise: free-text identifier for the specific thruster/device."
                 ),
@@ -2372,14 +2518,14 @@ class OCM(CCSDSDataMessage, BaseModel):
             FieldMetadata(keyword="DC_TYPE", spec_default=DutyCycleType.CONTINUOUS),
         ] = DutyCycleType.CONTINUOUS
 
-        # Duty cycle fields - conditional on dc_type ≠ CONTINUOUS
+        # Duty cycle fields - conditional on dc_type != CONTINUOUS
         dc_win_open: Annotated[
             CCSDSTimeTag,
             Field(
                 default=None,
                 description=(
                     "Start time of duty cycle-based maneuver window. "
-                    "Absolute or relative time tag. Required when DC_TYPE ≠ CONTINUOUS."
+                    "Absolute or relative time tag. Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_WIN_OPEN"),
@@ -2391,7 +2537,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "End time of duty cycle-based maneuver window. "
-                    "Absolute or relative time tag. Required when DC_TYPE ≠ CONTINUOUS."
+                    "Absolute or relative time tag. Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_WIN_CLOSE"),
@@ -2403,7 +2549,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Minimum number of 'ON' duty cycles (may override DC_EXEC_STOP,). "
-                    "Optional even when DC_TYPE ≠ CONTINUOUS."
+                    "Optional even when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_MIN_CYCLES"),
@@ -2415,7 +2561,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Maximum number of 'ON' duty cycles (may override DC_EXEC_STOP,). "
-                    "Optional even when DC_TYPE ≠ CONTINUOUS."
+                    "Optional even when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_MAX_CYCLES"),
@@ -2427,7 +2573,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Start time of initial duty cycle execution sequence. "
-                    "Absolute or relative time tag. Required when DC_TYPE ≠ CONTINUOUS."
+                    "Absolute or relative time tag. Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_EXEC_START"),
@@ -2439,7 +2585,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "End time of final duty cycle execution sequence. "
-                    "Absolute or relative time tag. Required when DC_TYPE ≠ CONTINUOUS."
+                    "Absolute or relative time tag. Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_EXEC_STOP"),
@@ -2451,7 +2597,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Reference time for the THRUST duty cycle. "
-                    "Absolute or relative time tag. Required when DC_TYPE ≠ CONTINUOUS."
+                    "Absolute or relative time tag. Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(keyword="DC_REF_TIME"),
@@ -2463,7 +2609,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Thruster pulse 'ON' duration. [s] "
-                    "Required when DC_TYPE ≠ CONTINUOUS."
+                    "Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(
@@ -2478,7 +2624,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Elapsed time between start of one pulse and start of the next. [s] "
-                    "Must be ≥ DC_TIME_PULSE_DURATION. Required when DC_TYPE ≠ CONTINUOUS."
+                    "Must be >= DC_TIME_PULSE_DURATION. Required when DC_TYPE != CONTINUOUS."
                 ),
             ),
             FieldMetadata(
@@ -2583,12 +2729,15 @@ class OCM(CCSDSDataMessage, BaseModel):
 
         # Raw maneuver data lines; at least one is required.
         data_lines: Annotated[
-            list[str],
+            list[ManeuverDataLine | DeploymentDataLine],
             Field(
                 min_length=1,
                 description=(
-                    "Maneuver time history lines, each containing values as specified by "
-                    "MAN_COMPOSITION. At least one data line is required (table 6-7,)."
+                    "Maneuver time history lines as typed rows - ``ManeuverDataLine`` "
+                    "(table 6-8, propulsive) or ``DeploymentDataLine`` (table 6-9), one "
+                    "value per MAN_COMPOSITION column. At least one is required "
+                    "(table 6-7). The KVN/XML adapters parse raw lines into these rows "
+                    "and serialize them back."
                 ),
             ),
         ]
@@ -2606,7 +2755,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                     "(TIME_ABSOLUTE or TIME_RELATIVE) per 6.2.8.18."
                 )
 
-            # section 6.2.8.14: at least one element beyond the time tag is required.
+            # Section 6.2.8.14: at least one element beyond the time tag is required.
             non_time = [
                 e for e in elements if e not in {"TIME_ABSOLUTE", "TIME_RELATIVE"}
             ]
@@ -2616,7 +2765,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                     "specification per 6.2.8.14."
                 )
 
-            # section 6.2.8.15: table 6-8 (propulsive) and 6-9 (deployment) not commingled.
+            # Section 6.2.8.15: table 6-8 (propulsive) and 6-9 (deployment) not commingled.
             _ORDER_6_8: list[str] = [
                 "TIME_ABSOLUTE",
                 "TIME_RELATIVE",
@@ -2666,7 +2815,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                     "(propulsive) and table 6-9 (deployment) per 6.2.8.15."
                 )
 
-            # section 6.2.8.16: values must appear in the order fixed in table 6-8 or 6-9.
+            # Section 6.2.8.16: values must appear in the order fixed in table 6-8 or 6-9.
             # Order is verified by checking that the position of each element in
             # the composition does not precede the position of any earlier element.
             # Unknown tokens (not in the applicable table) are rejected per 6.2.8.15.
@@ -2684,15 +2833,15 @@ class OCM(CCSDSDataMessage, BaseModel):
                     "table 6-8 (propulsive) or table 6-9 (deployment) per 6.2.8.16."
                 )
 
-            # section 6.2.8.20: DV components require MAN_DURA.
+            # Section 6.2.8.20: DV components require MAN_DURA.
             _DV: set[str] = {"DV_X", "DV_Y", "DV_Z"}
             if _DV & set(elements) and "MAN_DURA" not in elements:
                 raise ValueError(
                     "man_composition includes DV_X/Y/Z but MAN_DURA is absent; "
-                    "MAN_DURA is required to locate the impulsive ΔV (6.2.8.20)."
+                    "MAN_DURA is required to locate the impulsive delta-V (6.2.8.20)."
                 )
 
-            # section 6.2.8.20.10 / 6.2.8.21 / 6.2.8.22: 3-vector co-presence.
+            # Section 6.2.8.20.10 / 6.2.8.21 / 6.2.8.22: 3-vector co-presence.
             for vec in (
                 {"ACC_X", "ACC_Y", "ACC_Z"},
                 {"DV_X", "DV_Y", "DV_Z"},
@@ -2750,6 +2899,75 @@ class OCM(CCSDSDataMessage, BaseModel):
                     )
             return self
 
+        @field_validator("dc_ref_dir")
+        @classmethod
+        def _validate_dc_ref_dir_vector(cls, v: str | None) -> str | None:
+            # DC_REF_DIR is a three-element vector (table 6-7, page 6-43) written
+            # as space-delimited numeric components (7.6.1). Each token must be a
+            # CCSDS numeric literal - the same lexical form as a relative time tag.
+            if v is not None:
+                tokens: list[str] = v.split()
+                if len(tokens) != 3 or not all(
+                    _REL_TIME_TAG_RE.fullmatch(t) for t in tokens
+                ):
+                    raise ValueError(
+                        f"dc_ref_dir must be three space-delimited numeric components "
+                        f"(table 6-7, 7.6.1), got {v!r}."
+                    )
+            return v
+
+        @field_validator("dc_body_trigger")
+        @classmethod
+        def _validate_dc_body_trigger_vector(cls, v: str | None) -> str | None:
+            # DC_BODY_TRIGGER is a space-delimited numeric direction vector (7.6.1
+            # groups it with DC_REF_DIR as "values containing more than one
+            # number"). The spec fixes DC_REF_DIR at three elements but does not
+            # state an exact count for DC_BODY_TRIGGER, so only "at least two
+            # numeric components" is enforced here.
+            if v is not None:
+                tokens: list[str] = v.split()
+                if len(tokens) < 2 or not all(
+                    _REL_TIME_TAG_RE.fullmatch(t) for t in tokens
+                ):
+                    raise ValueError(
+                        f"dc_body_trigger must be space-delimited numeric components "
+                        f"(7.6.1), got {v!r}."
+                    )
+            return v
+
+        @model_validator(mode="after")
+        def validate_dc_execution_within_window(self) -> OCM.ManeuverSpecification:
+            """
+            Duty-cycle execution must fall within the duty-cycle window.
+
+            Table 6-7 (page 6-42) states DC_EXEC_START "must be scheduled to occur
+            coincident with or after DC_WIN_OPEN" and DC_EXEC_STOP "coincident with
+            or prior to DC_WIN_CLOSE". Time tags may be absolute or relative; this
+            block-level check orders same-format pairs, which need no external
+            context. Mixed relative/absolute pairs need EPOCH_TZERO (held on
+            OCM.Metadata) to reconcile, so they are ordered by
+            ``OCM.validate_maneuver_dc_windows_across_formats`` instead.
+            """
+            if self.dc_exec_start is not None and self.dc_win_open is not None:
+                order = _compare_same_format_time_tags(
+                    self.dc_exec_start, self.dc_win_open
+                )
+                if order is not None and order < 0:
+                    raise ValueError(
+                        "dc_exec_start must be coincident with or after dc_win_open "
+                        "(table 6-7, 6.2.8.20.6)."
+                    )
+            if self.dc_exec_stop is not None and self.dc_win_close is not None:
+                order = _compare_same_format_time_tags(
+                    self.dc_exec_stop, self.dc_win_close
+                )
+                if order is not None and order > 0:
+                    raise ValueError(
+                        "dc_exec_stop must be coincident with or prior to dc_win_close "
+                        "(table 6-7, 6.2.8.20.6)."
+                    )
+            return self
+
         @field_validator("man_units")
         @classmethod
         def _validate_man_units_brackets(cls, v: str | None) -> str | None:
@@ -2761,6 +2979,74 @@ class OCM(CCSDSDataMessage, BaseModel):
             return v
 
         @model_validator(mode="after")
+        def validate_man_units_element_count(self) -> OCM.ManeuverSpecification:
+            """
+            Cross-check MAN_UNITS element count against MAN_COMPOSITION.
+
+            When MAN_UNITS is present, the spec text (table 6-7, page 91) says one
+            unit per element *after* the time tag (=> one fewer than
+            MAN_COMPOSITION), but the CCSDS 502.0-B-3 Annex G example on page 206
+            (and the second maneuver block of the ocm_g17 fixture) instead prefixes
+            an 'n/a' unit for the time tag (=> equal to MAN_COMPOSITION). Both forms
+            appear in the normative document, so either count is accepted; only a
+            genuine mismatch is rejected. ``man_composition`` is already validated
+            (single time spec, known vocabulary) by the time this runs. Per-column
+            data-line arity is guaranteed structurally: rows are typed
+            ``ManeuverDataLine``/``DeploymentDataLine`` populated column-by-column
+            from MAN_COMPOSITION by the KVN/XML readers.
+            """
+            if self.man_units is None:
+                return self
+            expected: int = len(
+                [e.strip() for e in self.man_composition.split(",") if e.strip()]
+            )
+            units: list[str] = [
+                u.strip() for u in self.man_units.strip("[]").split(",") if u.strip()
+            ]
+            if len(units) not in {expected - 1, expected}:
+                raise ValueError(
+                    f"MAN_UNITS lists {len(units)} unit(s) but MAN_COMPOSITION "
+                    f"declares {expected} element(s); expected {expected - 1} (one "
+                    f"per element after the time tag, table 6-7) or {expected} "
+                    f"(with a leading time-tag unit, per the Annex G example). "
+                    f"Got {self.man_units!r}."
+                )
+            return self
+
+        @model_validator(mode="after")
+        def validate_rows_match_composition_table(self) -> OCM.ManeuverSpecification:
+            """
+            Every data-line row must be from the same table as MAN_COMPOSITION.
+
+            MAN_COMPOSITION draws from table 6-8 (propulsive) or table 6-9
+            (deployment), never both (enforced by
+            ``validate_man_composition_has_one_time``). The rows must match: a
+            deployment composition takes ``DeploymentDataLine`` rows, a propulsive
+            one takes ``ManeuverDataLine`` rows (6.2.8.15).
+            """
+            is_deployment: bool = any(
+                e.strip().upper().startswith("DEPLOY")
+                for e in self.man_composition.split(",")
+            )
+            expected_type: type = (
+                OCM.ManeuverSpecification.DeploymentDataLine
+                if is_deployment
+                else OCM.ManeuverSpecification.ManeuverDataLine
+            )
+            for index, row in enumerate(self.data_lines):
+                if not isinstance(row, expected_type):
+                    # ValueError (not TypeError) so Pydantic surfaces it as a
+                    # ValidationError; this is a spec-consistency violation, not a
+                    # Python type error.
+                    raise ValueError(  # noqa: TRY004
+                        f"Maneuver data-line row {index} is a "
+                        f"{type(row).__name__}, but MAN_COMPOSITION is "
+                        f"{'deployment' if is_deployment else 'propulsive'} "
+                        f"(expects {expected_type.__name__}) (6.2.8.15)."
+                    )
+            return self
+
+        @model_validator(mode="after")
         def _validate_dc_cycles_order(self) -> OCM.ManeuverSpecification:
             if (
                 self.dc_min_cycles is not None
@@ -2768,7 +3054,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 and self.dc_min_cycles > self.dc_max_cycles
             ):
                 raise ValueError(
-                    f"dc_min_cycles ({self.dc_min_cycles}) must be ≤ "
+                    f"dc_min_cycles ({self.dc_min_cycles}) must be <= "
                     f"dc_max_cycles ({self.dc_max_cycles}) (table 6-7)."
                 )
             return self
@@ -2791,10 +3077,12 @@ class OCM(CCSDSDataMessage, BaseModel):
             """
             Reject duplicate time tags in maneuver data (section 6.2.2.4).
 
-            §6.2.8 imposes no ordering requirement on maneuver lines; only
-            §6.2.2.4's no-duplicate rule applies here.
+            Section 6.2.8 imposes no ordering requirement on maneuver lines; only
+            section 6.2.2.4's no-duplicate rule applies here.
             """
-            _check_no_duplicate_time_tags(self.data_lines, "maneuver")
+            _check_no_duplicate_time_tags(
+                [row.time_tag for row in self.data_lines], "maneuver"
+            )
             return self
 
     # -----------------------------------------------------------------------
@@ -2869,7 +3157,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 gt=0,
                 description=(
-                    "Gravitational coefficient (G × central mass,) of attracting body, "
+                    "Gravitational coefficient (G x central mass,) of attracting body, "
                     "if different from the gravity model. [km**3/s**2]"
                 ),
             ),
@@ -2913,7 +3201,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 description=(
                     "Central body's oblate spheroid oblateness. "
-                    "For Earth ≈ 1/298.257223563 = 0.00335281066475."
+                    "For Earth approximately 1/298.257223563 = 0.00335281066475."
                 ),
             ),
             FieldMetadata(keyword="OBLATE_FLATTENING"),
@@ -3341,7 +3629,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 ge=0,
                 description=(
                     "Actual time span in days used for the OD. [d] "
-                    "Should equal DAYS_SINCE_FIRST_OBS − DAYS_SINCE_LAST_OBS."
+                    "Should equal DAYS_SINCE_FIRST_OBS - DAYS_SINCE_LAST_OBS."
                 ),
             ),
             FieldMetadata(
@@ -3408,7 +3696,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 ge=0,
-                description="Positional error ellipsoid 1σ major eigenvalue at OD epoch. [m]",
+                description="Positional error ellipsoid 1-sigma major eigenvalue at OD epoch. [m]",
             ),
             FieldMetadata(
                 keyword="OD_EPOCH_EIGMAJ",
@@ -3421,7 +3709,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 ge=0,
-                description="Positional error ellipsoid 1σ intermediate eigenvalue at OD epoch. [m]",
+                description="Positional error ellipsoid 1-sigma intermediate eigenvalue at OD epoch. [m]",
             ),
             FieldMetadata(
                 keyword="OD_EPOCH_EIGINT",
@@ -3434,7 +3722,7 @@ class OCM(CCSDSDataMessage, BaseModel):
             Field(
                 default=None,
                 ge=0,
-                description="Positional error ellipsoid 1σ minor eigenvalue at OD epoch. [m]",
+                description="Positional error ellipsoid 1-sigma minor eigenvalue at OD epoch. [m]",
             ),
             FieldMetadata(
                 keyword="OD_EPOCH_EIGMIN",
@@ -3448,7 +3736,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 ge=0,
                 description=(
-                    "Maximum predicted major eigenvalue of the 1σ positional error ellipsoid "
+                    "Maximum predicted major eigenvalue of the 1-sigma positional error ellipsoid "
                     "over the entire TIME_SPAN of the OCM. [m]"
                 ),
             ),
@@ -3464,7 +3752,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 default=None,
                 ge=0,
                 description=(
-                    "Minimum predicted minor eigenvalue of the 1σ positional error ellipsoid "
+                    "Minimum predicted minor eigenvalue of the 1-sigma positional error ellipsoid "
                     "over the entire TIME_SPAN of the OCM. [m]"
                 ),
             ),
@@ -3499,7 +3787,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 ge=0,
                 description=(
                     "Generalized Dilution Of Precision for this OD, based on the "
-                    "observability grammian (annex F, subsection F4,). Ideal value ≈ 1.0."
+                    "observability grammian (annex F, subsection F4,). Ideal value approximately 1.0."
                 ),
             ),
             FieldMetadata(keyword="GDOP"),
@@ -3670,7 +3958,7 @@ class OCM(CCSDSDataMessage, BaseModel):
                 and not (eigmaj >= eigint >= eigmin)
             ):
                 raise ValueError(
-                    f"Eigenvalues must satisfy OD_EPOCH_EIGMAJ ≥ OD_EPOCH_EIGINT ≥ OD_EPOCH_EIGMIN "
+                    f"Eigenvalues must satisfy OD_EPOCH_EIGMAJ >= OD_EPOCH_EIGINT >= OD_EPOCH_EIGMIN "
                     f"(got {eigmaj} / {eigint} / {eigmin}, table 6-11)."
                 )
             return self
@@ -3801,6 +4089,46 @@ class OCM(CCSDSDataMessage, BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_maneuver_dc_windows_across_formats(self) -> OCM:
+        """
+        Order DC execution vs window tags that mix relative and absolute formats.
+
+        ``ManeuverSpecification.validate_dc_execution_within_window`` orders
+        same-format pairs; when one tag is relative (seconds) and the other
+        absolute, it abstains because the comparison needs ``EPOCH_TZERO``. Here at
+        the OCM level that value is available, so mixed pairs are resolved to
+        absolute instants and ordered per table 6-7: DC_EXEC_START coincident with
+        or after DC_WIN_OPEN, DC_EXEC_STOP coincident with or prior to DC_WIN_CLOSE.
+        """
+        tzero: str = self.metadata.epoch_tzero
+        for index, man in enumerate(self.maneuvers or []):
+            if (
+                man.dc_exec_start is not None
+                and man.dc_win_open is not None
+                and _compare_same_format_time_tags(man.dc_exec_start, man.dc_win_open)
+                is None
+                and _resolve_time_tag(man.dc_exec_start, tzero)
+                < _resolve_time_tag(man.dc_win_open, tzero)
+            ):
+                raise ValueError(
+                    f"Maneuver block {index}: dc_exec_start must be coincident with or "
+                    f"after dc_win_open (table 6-7, 6.2.8.20.6)."
+                )
+            if (
+                man.dc_exec_stop is not None
+                and man.dc_win_close is not None
+                and _compare_same_format_time_tags(man.dc_exec_stop, man.dc_win_close)
+                is None
+                and _resolve_time_tag(man.dc_exec_stop, tzero)
+                > _resolve_time_tag(man.dc_win_close, tzero)
+            ):
+                raise ValueError(
+                    f"Maneuver block {index}: dc_exec_stop must be coincident with or "
+                    f"prior to dc_win_close (table 6-7, 6.2.8.20.6)."
+                )
+        return self
+
     @classmethod
     def builder(cls) -> OCMBuilder:
         """
@@ -3809,6 +4137,38 @@ class OCM(CCSDSDataMessage, BaseModel):
         Use `model_copy(update={...})` to create modified copies of a frozen instance.
         """
         return OCMBuilder()
+
+    def composite_maneuver_groups(self) -> list[list[OCM.ManeuverSpecification]]:
+        """
+        Group maneuver blocks that constitute one composite maneuver (section 6.2.8.11).
+
+        Per section 6.2.8.11, maneuver constituents sharing the same MAN_ID, MAN_BASIS, and
+        MAN_REF_FRAME "shall be added together to obtain the total composite maneuver
+        description". This returns those constituent groups, preserving first-seen
+        order both within and across groups.
+
+        The physical summation of a group is intentionally left to the caller: the
+        spec defines no canonical element-wise combination across constituents with
+        differing MAN_COMPOSITION or time grids, so it is a modeling choice rather
+        than a message-level operation. Inspect ``group[0].man_id`` etc. to identify
+        each group.
+
+        Returns:
+            list[list[OCM.ManeuverSpecification]]: One inner list per composite
+            maneuver; empty when the message has no maneuver blocks.
+        """
+        CompositeKey = tuple[
+            str, ManeuverBasis | None, RefFrame | ExtendedManCovRefFrame | str
+        ]
+        groups: dict[CompositeKey, list[OCM.ManeuverSpecification]] = {}
+        for maneuver in self.maneuvers or []:
+            key: CompositeKey = (
+                maneuver.man_id,
+                maneuver.man_basis,
+                maneuver.man_ref_frame,
+            )
+            groups.setdefault(key, []).append(maneuver)
+        return list(groups.values())
 
 
 class OCMBuilder:

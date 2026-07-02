@@ -3,17 +3,32 @@
 from __future__ import annotations
 
 import itertools
-from datetime import UTC, datetime
-from typing import Annotated, Any, ClassVar
+from datetime import UTC
+from datetime import datetime
+from typing import Annotated
+from typing import Any
+from typing import ClassVar
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import model_validator
 
-from ._aliases import CCSDSDate, Comment, OEMVersionStr, OptionalCCSDSDate
-from ._base import BaseHeader, _validate_ref_frame_epoch
+from ._aliases import CCSDSDate
+from ._aliases import Comment
+from ._aliases import OEMVersionStr
+from ._aliases import OptionalCCSDSDate
+from ._base import BaseHeader
+from ._base import _validate_ref_frame_epoch
 from ._epoch import _normalize_epoch
-from ._fields import Delineation, FieldMetadata
-from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
-from .values import CenterName, Interpolation, ManCovRefFrame, RefFrame, TimeSystem
+from ._fields import Delineation
+from ._fields import FieldMetadata
+from .message import CCSDS_MODEL_CONFIG
+from .message import CCSDSDataMessage
+from .values import CenterName
+from .values import Interpolation
+from .values import ManCovRefFrame
+from .values import RefFrame
+from .values import TimeSystem
 
 
 class OEM(CCSDSDataMessage, BaseModel):
@@ -863,7 +878,7 @@ class OEM(CCSDSDataMessage, BaseModel):
 
         @model_validator(mode="after")
         def validate_interpolation_record_count(self) -> OEM.Segment:
-            """§5.2.4.7: data block must contain enough records for the interpolation method."""
+            """Section 5.2.4.7: data block must contain enough records for the interpolation method."""
             method = self.metadata.interpolation
             degree = self.metadata.interpolation_degree
             if method is None or method == Interpolation.PROPAGATE or degree is None:
@@ -871,7 +886,7 @@ class OEM(CCSDSDataMessage, BaseModel):
             if (n_lines := len(self.ephemeris_data.ephemeris_data_lines)) < degree + 1:
                 raise ValueError(
                     f"INTERPOLATION={method} with INTERPOLATION_DEGREE={degree} requires "
-                    f"at least {degree + 1} ephemeris data records (§5.2.4.7); "
+                    f"at least {degree + 1} ephemeris data records (section 5.2.4.7); "
                     f"found {n_lines}."
                 )
             return self
@@ -896,6 +911,34 @@ class OEM(CCSDSDataMessage, BaseModel):
         Use ``model_copy(update={...})`` to create modified copies of a frozen instance.
         """
         return OEMBuilder()
+
+    def get_segment_for_epoch(self, epoch: str) -> OEM.Segment | None:
+        """
+        Return the segment whose time span contains ``epoch``, or ``None``.
+
+        Guards the section 5.2.4.6 rule that interpolation must not cross a metadata
+        (segment) boundary: select the segment for an epoch with this method, then
+        interpolate only within that segment's ``ephemeris_data``. A segment spans
+        its ``START_TIME``..``STOP_TIME`` inclusive; the first matching segment is
+        returned when spans abut or overlap.
+
+        Args:
+            epoch (str): A CCSDS absolute date (calendar or day-of-year), compared
+                in the message's fixed time system.
+
+        Returns:
+            OEM.Segment | None: The containing segment, or ``None`` if no segment's
+            span covers ``epoch``.
+        """
+        target: str = _normalize_epoch(epoch)
+        for segment in self.segments:
+            if (
+                _normalize_epoch(segment.metadata.start_time)
+                <= target
+                <= _normalize_epoch(segment.metadata.stop_time)
+            ):
+                return segment
+        return None
 
     @model_validator(mode="after")
     def validate_time_system_fixed(self) -> OEM:
@@ -947,17 +990,17 @@ class OEM(CCSDSDataMessage, BaseModel):
 
     @model_validator(mode="after")
     def validate_single_object(self) -> OEM:
-        """§5.1.3: all segments must describe the same single object."""
+        """Section 5.1.3: all segments must describe the same single object."""
         names: set[str] = {s.metadata.object_name for s in self.segments}
         if len(names) > 1:
             raise ValueError(
-                f"OEM shall contain orbit data for a single object (§5.1.3); "
+                f"OEM shall contain orbit data for a single object (section 5.1.3); "
                 f"found multiple OBJECT_NAME values: {sorted(names)}"
             )
         ids: set[str] = {s.metadata.object_id for s in self.segments}
         if len(ids) > 1:
             raise ValueError(
-                f"OEM shall contain orbit data for a single object (§5.1.3); "
+                f"OEM shall contain orbit data for a single object (section 5.1.3); "
                 f"found multiple OBJECT_ID values: {sorted(ids)}"
             )
         return self

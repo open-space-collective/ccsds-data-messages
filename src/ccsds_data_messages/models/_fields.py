@@ -10,7 +10,8 @@ Provides a single canonical implementation for the two CCSDS delineation keyword
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 from typing import Any
 
 

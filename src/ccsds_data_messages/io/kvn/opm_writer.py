@@ -13,12 +13,9 @@ from __future__ import annotations
 import io
 from typing import TYPE_CHECKING
 
-from ccsds_data_messages.io.kvn._utils import (
-    SupportsWrite,
-    emit_block,
-    emit_user_defined,
-    guard_lines,
-)
+from ccsds_data_messages.io.kvn._utils import SupportsWrite
+from ccsds_data_messages.io.kvn._utils import emit_block
+from ccsds_data_messages.io.kvn._utils import guard_lines
 from ccsds_data_messages.io.kvn.parser import ODM_MAX_LINE_LENGTH
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.models.opm import OPM
@@ -65,7 +62,7 @@ class KVNOPMWriter:
                 out.write("\n")
 
         if message.data.user_defined is not None:
-            emit_user_defined(message.data.user_defined.user_defined, out)
+            emit_block(message.data.user_defined, out, options=options)
 
     def write(
         self, message: OPM, path: Path, *, options: WriterOptions | None = None

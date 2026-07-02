@@ -2,7 +2,7 @@
 Shared introspection helpers for XML adapters.
 
 The same ``FieldMetadata(keyword=...)`` annotation that drives KVN keyword names
-also drives XML element names: section 8.1 states that ODM/XML tags for keywords
+also drives XML element names: Section 8.1 states that ODM/XML tags for keywords
 'appear just as in the KVN, that is, all capital letters.' Tags related to the
 message structure are in lowerCamelCase.
 """
@@ -11,11 +11,15 @@ from __future__ import annotations
 
 # Build/serialize only in this module - parsing untrusted XML goes through
 # io.xml.parser, which uses defusedxml.
+import re
 import xml.etree.ElementTree as ET  # noqa: S405
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+from typing import Any
 
 from ccsds_data_messages.exceptions import ParseError
-from ccsds_data_messages.io._utils import build_keyword_map, format_value, map_kvs
+from ccsds_data_messages.io._utils import build_keyword_map
+from ccsds_data_messages.io._utils import format_value
+from ccsds_data_messages.io._utils import map_kvs
 from ccsds_data_messages.io.xml.parser import strip_ns
 from ccsds_data_messages.models._fields import FieldMetadata
 
@@ -35,6 +39,56 @@ _TAG_SEGMENT: str = (
     "segment"  # OPM/OMM/OCM have no Segment model (OEM.Segment uses get_xml_tag).
 )
 _TAG_DATA: str = "data"  # OCM and OEM have no Data model wrapping the section.
+
+# NDM/XML root-element attributes, identical across all four message writers.
+_XMLNS_XSI: str = "http://www.w3.org/2001/XMLSchema-instance"
+_NDM_SCHEMA: str = (
+    "https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-3.0.0-master-3.0.xsd"
+)
+
+# The version keyword of every ODM message matches CCSDS_<TYPE>_VERS (section 7.4.2).
+# It is the header's ``id`` attribute in NDM/XML and doubles as the ``version`` value.
+_VERSION_KEYWORD_RE = re.compile(r"^CCSDS_[A-Z]+_VERS$")
+
+
+def build_ndm_root(message_class: type, header: BaseModel) -> ET.Element:
+    """
+    Build the root NDM/XML element for a message, with its standard attributes.
+
+    Every ODM/XML message shares the same root envelope (section 8.4): the
+    ``xmlns:xsi`` and ``xsi:noNamespaceSchemaLocation`` namespace attributes, an
+    ``id`` naming the version keyword (e.g. ``CCSDS_OPM_VERS``), and the ``version``
+    string. Both the ``id`` and the version value are derived from the header's
+    ``FieldMetadata`` - like every other keyword, nothing is hardcoded here.
+
+    Args:
+        message_class (type): The message model class, whose ``_xml_tag`` names the
+            root element (e.g. ``OPM`` -> ``<opm>``).
+        header (BaseModel): The message header instance, carrying the version field.
+
+    Returns:
+        ET.Element: The configured root element, ready for header/body sub-elements.
+
+    Raises:
+        ValueError: If the header declares no ``CCSDS_<TYPE>_VERS`` keyword.
+    """
+    version_keyword, version_field = _version_keyword_field(type(header))
+    root: ET.Element = ET.Element(get_xml_tag(message_class))
+    root.set("xmlns:xsi", _XMLNS_XSI)
+    root.set("xsi:noNamespaceSchemaLocation", _NDM_SCHEMA)
+    root.set("id", version_keyword)
+    root.set("version", str(getattr(header, version_field)))
+    return root
+
+
+def _version_keyword_field(header_class: type[BaseModel]) -> tuple[str, str]:
+    """Return the ``(keyword, field_name)`` of a header's ``CCSDS_<TYPE>_VERS`` field."""
+    for keyword, field_name in build_keyword_map(header_class).items():
+        if _VERSION_KEYWORD_RE.match(keyword):
+            return keyword, field_name
+    raise ValueError(
+        f"{header_class.__qualname__} declares no CCSDS_<TYPE>_VERS version keyword."
+    )
 
 
 def get_xml_tag(model_class: type) -> str:
@@ -143,7 +197,14 @@ def read_model(
 
         if tag == "COMMENT":
             comments.append(text)
+        elif tag == "USER_DEFINED":
+            # Spec form: the key lives in the ``parameter`` attribute,
+            # e.g. <USER_DEFINED parameter="EARTH_MODEL">WGS-84</USER_DEFINED>.
+            # Normalize to the USER_DEFINED_x key shape that map_kvs aggregates.
+            if (param := child.get("parameter")) is not None:
+                kvs[f"USER_DEFINED_{param}"] = text
         elif tag.startswith("USER_DEFINED_") or tag in keyword_map:
+            # Back-compat: tolerate the legacy <USER_DEFINED_x> element form.
             kvs[tag] = text
 
     if extra_kvs:
@@ -166,7 +227,7 @@ def write_model(
     ``COMMENT`` string becomes a separate ``<COMMENT>`` element (section 8.13.7).
     When ``options.include_units`` is ``True`` (the default), a ``units``
     attribute is added when ``FieldMetadata`` carries units (section 8.13.6/section 8.10.18).
-    ``USER_DEFINED_x`` fields become ``<USER_DEFINED_x>`` elements
+    ``USER_DEFINED_x`` fields become ``<USER_DEFINED parameter="x">`` elements
     (section 6.2.11.1/section 3.2.4.12/section 4.2.4.10).
 
     Args:
@@ -184,7 +245,7 @@ def write_model(
         for keyword, field_name in build_keyword_map(type(model)).items()
     }
     include_units: bool = options is None or options.include_units
-    suppress: bool = options is not None and options.suppress_defaults
+    suppress: bool = options is not None and bool(options.suppress_defaults)
 
     for field_name in type(model).model_fields:
         if field_name in skip_fields:
@@ -193,12 +254,11 @@ def write_model(
         if (value := getattr(model, field_name)) is None:
             continue
         if suppress:
-            # Currently unreachable with a distinct effect: every optional field's
-            # Python default is None, and None values are already skipped above,
-            # so `not in model_fields_set` never fires for a non-None value today.
-            # Kept for correctness if a future field gains a non-None default.
+            # (a) A field with a non-None Python default (e.g. OCM's
+            # TIME_SYSTEM = UTC) that the source omitted: not in model_fields_set.
             if field_name not in model.model_fields_set:
                 continue
+            # (b) A field explicitly set to its CCSDS spec-defined default.
             field_info_for_suppress: FieldInfo = type(model).model_fields[field_name]
             spec_default = next(
                 (
@@ -247,11 +307,13 @@ def write_model(
                         break
 
         elif isinstance(value, dict):
-            # USER_DEFINED_x pattern (section 6.2.11.1 / section 3.2.4.12 / section 4.2.4.10).
+            # User-defined parameters (section 6.2.11.1 / section 3.2.4.12 / section 4.2.4.10).
+            # ODM/XML carries the key in a ``parameter`` attribute on a bare
+            # <USER_DEFINED> element, e.g.
+            # <USER_DEFINED parameter="EARTH_MODEL">WGS-84</USER_DEFINED>.
             for user_key, user_value in value.items():
-                user_defined_element: ET.Element = ET.SubElement(
-                    parent, f"USER_DEFINED_{user_key}"
-                )
+                user_defined_element: ET.Element = ET.SubElement(parent, "USER_DEFINED")
+                user_defined_element.set("parameter", user_key)
                 user_defined_element.text = str(user_value)
 
 

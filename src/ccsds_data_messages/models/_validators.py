@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import re
 
-from ._epoch import validate_ccsds_date, validate_time_tag
+from ._epoch import validate_ccsds_date
+from ._epoch import validate_time_tag
 
 
 def _validate_comment(value: list[str] | None) -> list[str] | None:
@@ -25,7 +26,7 @@ def _validate_comment(value: list[str] | None) -> list[str] | None:
 
 def _validate_version_format(value: str, field_name: str = "version") -> str:
     """
-    Reject version strings that are not in '3.y' format (used for OCM, §7.9.1).
+    Reject version strings that are not in '3.y' format (used for OCM, section 7.9.1).
 
     Args:
         value (str): The version string to validate.
@@ -34,7 +35,7 @@ def _validate_version_format(value: str, field_name: str = "version") -> str:
     Raises:
         ValueError: If value does not match '3.y' (e.g. '3.0').
     """
-    # Accept 3.y broadly: OCM was introduced at 3.0 in 502.0-B-3 (§7.9.1), but
+    # Accept 3.y broadly: OCM was introduced at 3.0 in 502.0-B-3 (section 7.9.1), but
     # future Blue Book issues may define minor revisions (3.1, etc.). Unlike
     # OPM/OMM/OEM, which have a closed historical set of sanctioned versions,
     # OCM has no such set yet, so the check stays open-ended on the minor digit.
@@ -59,17 +60,17 @@ def _validate_version_in_set(value: str, allowed: frozenset[str], field_name: st
 
 
 def _validate_opm_version(value: str) -> str:
-    """§7.9.1: OPM valid versions are {1.0, 2.0, 3.0}."""
+    """Section 7.9.1: OPM valid versions are {1.0, 2.0, 3.0}."""
     return _validate_version_in_set(value, _OPM_VALID_VERSIONS, "CCSDS_OPM_VERS")
 
 
 def _validate_omm_version(value: str) -> str:
-    """§7.9.1: OMM valid versions are {2.0, 3.0}."""
+    """Section 7.9.1: OMM valid versions are {2.0, 3.0}."""
     return _validate_version_in_set(value, _OMM_VALID_VERSIONS, "CCSDS_OMM_VERS")
 
 
 def _validate_oem_version(value: str) -> str:
-    """§7.9.1: OEM valid versions are {1.0, 2.0, 3.0}."""
+    """Section 7.9.1: OEM valid versions are {1.0, 2.0, 3.0}."""
     return _validate_version_in_set(value, _OEM_VALID_VERSIONS, "CCSDS_OEM_VERS")
 
 

@@ -12,7 +12,8 @@ blocking direct instantiation of the base itself.
 from __future__ import annotations
 
 from abc import ABC
-from typing import Any, Self
+from typing import Any
+from typing import Self
 
 from pydantic import ConfigDict
 

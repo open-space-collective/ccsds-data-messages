@@ -2,8 +2,8 @@
 XML adapter: Orbit Ephemeris Message writer.
 
 Produces OEM/XML per section 8.10.
-section 8.10.13: one <stateVector> per ephemeris data line.
-section 8.10.19: one <covarianceMatrix> per covariance epoch.
+Section 8.10.13: one <stateVector> per ephemeris data line.
+Section 8.10.19: one <covarianceMatrix> per covariance epoch.
 """
 
 from __future__ import annotations
@@ -14,23 +14,17 @@ import xml.etree.ElementTree as ET  # noqa: S405
 from typing import TYPE_CHECKING
 
 from ccsds_data_messages.io.options import WriterOptions
-from ccsds_data_messages.io.xml._utils import (
-    _TAG_BODY,
-    _TAG_DATA,
-    get_xml_tag,
-    serialize_xml,
-    write_model,
-    write_xml_file,
-)
+from ccsds_data_messages.io.xml._utils import _TAG_BODY
+from ccsds_data_messages.io.xml._utils import _TAG_DATA
+from ccsds_data_messages.io.xml._utils import build_ndm_root
+from ccsds_data_messages.io.xml._utils import get_xml_tag
+from ccsds_data_messages.io.xml._utils import serialize_xml
+from ccsds_data_messages.io.xml._utils import write_model
+from ccsds_data_messages.io.xml._utils import write_xml_file
 from ccsds_data_messages.models.oem import OEM
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-_XMLNS_XSI: str = "http://www.w3.org/2001/XMLSchema-instance"
-_NDM_SCHEMA: str = (
-    "https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-3.0.0-master-3.0.xsd"
-)
 
 
 class XMLOEMWriter:
@@ -46,11 +40,7 @@ class XMLOEMWriter:
         *,
         options: WriterOptions | None = None,
     ) -> ET.Element:
-        root: ET.Element = ET.Element(get_xml_tag(OEM))
-        root.set("xmlns:xsi", _XMLNS_XSI)
-        root.set("xsi:noNamespaceSchemaLocation", _NDM_SCHEMA)
-        root.set("id", "CCSDS_OEM_VERS")
-        root.set("version", message.header.ccsds_oem_vers)
+        root: ET.Element = build_ndm_root(OEM, message.header)
 
         header_element: ET.Element = ET.SubElement(root, get_xml_tag(OEM.Header))
         write_model(
@@ -73,25 +63,25 @@ class XMLOEMWriter:
 
             data_element: ET.Element = ET.SubElement(segment_element, _TAG_DATA)
 
-            # section 7.8.9: comments at the beginning of the ephemeris data section.
+            # Section 7.8.9: comments at the beginning of the ephemeris data section.
             ephemeris_data: OEM.Segment.EphemerisData = segment.ephemeris_data
             if ephemeris_data.comment:
                 for comment_text in ephemeris_data.comment:
                     ET.SubElement(data_element, "COMMENT").text = comment_text
 
-            # section 8.10.13: one <stateVector> per ephemeris data line.
+            # Section 8.10.13: one <stateVector> per ephemeris data line.
             for state_vector_line in ephemeris_data.ephemeris_data_lines:
                 state_vector_element: ET.Element = ET.SubElement(
                     data_element, get_xml_tag(OEM.Segment.EphemerisData.EphemerisDataLine)
                 )
                 write_model(state_vector_line, state_vector_element, options=options)
 
-            # section 8.10.19: one <covarianceMatrix> per covariance epoch.
+            # Section 8.10.19: one <covarianceMatrix> per covariance epoch.
             if segment.covariance_matrix is not None:
                 covariance_matrix: OEM.Segment.CovarianceMatrix = (
                     segment.covariance_matrix
                 )
-                # section 7.8.9: comments at the beginning of the covariance section.
+                # Section 7.8.9: comments at the beginning of the covariance section.
                 if covariance_matrix.comment:
                     for comment_text in covariance_matrix.comment:
                         ET.SubElement(data_element, "COMMENT").text = comment_text

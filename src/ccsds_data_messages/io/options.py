@@ -6,7 +6,8 @@ Writer-facing output formatting options, shared across all KVN and XML writers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 
 
 @dataclass(frozen=True)
@@ -42,7 +43,7 @@ class WriterOptions:
     Right-pad KVN keywords within each block so the ``=`` signs align in a column.
 
     Block-local: each block aligns independently to the longest keyword in that block.
-    Purely cosmetic: section 7.4.5 states whitespace around keywords is insignificant.
+    Purely cosmetic: Section 7.4.5 states whitespace around keywords is insignificant.
 
     Example (align_keywords=True)::
 
@@ -83,7 +84,10 @@ class WriterOptions:
     float_formats: dict[str, str] = field(default_factory=dict)
     """
     Per-keyword format-spec overrides, keyed by CCSDS keyword string
-    (e.g. ``"X"``, ``"CX_X"``, ``"MEAN_MOTION"``).
+    (e.g. ``"X"``, ``"CX_X"``, ``"MEAN_MOTION"``). This also keys OCM maneuver
+    data-line columns by their MAN_COMPOSITION keyword (e.g. ``"DEPLOY_DV_X"``,
+    ``"THR_X"``), so a caller can choose the notation of a maneuver column - for
+    example floating-point (``" .8e"``) rather than the adaptive ``.15g`` default.
 
     Overrides the ``FieldMetadata.format_spec`` baked into the domain model. Uses Python's
     format mini-language. The ``" "`` (space) flag is recommended for columns that mix
@@ -101,30 +105,33 @@ class WriterOptions:
         # Full IEEE-754 double precision (16 sig digits) for specific fields:
         WriterOptions(float_formats={"CX_X": " .15e"})
 
+        # Floating-point notation for an OCM maneuver deployment column:
+        WriterOptions(float_formats={"DEPLOY_DV_X": " .8e"})
+
         # Suppress sign-column alignment on a field:
         WriterOptions(float_formats={"X": ".3f"})
     """
 
-    suppress_defaults: bool = False
+    suppress_defaults: bool | None = None
     """
-    Omit fields whose value equals the Pydantic model field default.
+    Omit fields whose value equals the CCSDS spec-defined default.
 
-    When ``True``, keyword lines whose runtime value matches the field's declared
-    Python default are not emitted. This produces output that matches CCSDS spec
-    examples, which conventionally omit keyword lines whose value is the
-    spec-defined default (e.g. ``TIME_SYSTEM = UTC``, ``DC_TYPE = CONTINUOUS``).
+    When ``True``, keyword lines whose runtime value matches the field's
+    ``FieldMetadata(spec_default=...)`` are not emitted. This produces output that
+    matches CCSDS spec examples, which conventionally omit keyword lines whose
+    value is the spec-defined default (e.g. ``TIME_SYSTEM = UTC``,
+    ``DC_TYPE = CONTINUOUS``).
 
-    A field is suppressed when either (a) it was not in the set of fields
-    explicitly provided at construction time (``model.model_fields_set``), or
-    (b) its value equals the CCSDS spec-defined default declared via
-    ``FieldMetadata(spec_default=...)`` - not the Pydantic field default.
+    Tri-state: ``None`` (the default) means "let the writer choose its
+    per-message-type default" - the OCM writers suppress spec-defaults (to match
+    the OCM fixtures), while OPM/OMM/OEM writers do not. Passing an explicit
+    ``True``/``False`` overrides that choice for every writer. Because the
+    unspecified case is ``None`` rather than ``False``, ``WriterOptions()`` and
+    passing no options at all produce identical output.
 
-    (a) has no observable effect today. Every optional field's Pydantic
-    default is ``None``, and ``None``-valued fields are already omitted from
-    output regardless of this option, so a field can only reach (a) with a
-    non-``None`` value if some future field is given a non-``None`` Python
-    default. In the current schemas, only (b) suppresses anything.
-
-    Default ``False``: all non-None fields are emitted. The OCM KVN and XML
-    writers set this to ``True`` when the caller passes no explicit options.
+    A field is suppressed when either (a) it was not explicitly provided at
+    construction time (``field_name not in model.model_fields_set``) and so carries
+    its declared Python default - e.g. OCM's ``TIME_SYSTEM`` defaulting to ``UTC`` -
+    or (b) its value equals the CCSDS spec-defined default declared via
+    ``FieldMetadata(spec_default=...)``.
     """

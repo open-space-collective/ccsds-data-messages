@@ -1,4 +1,4 @@
-# Copyright © Loft Orbital Solutions Inc.
+# Copyright (c) Loft Orbital Solutions Inc.
 """
 CCSDS Data Messages library.
 
@@ -38,40 +38,34 @@ Quick start - construct a message::
     )
 """
 
-from ccsds_data_messages.exceptions import (
-    CCSDSError,
-    DetectionError,
-    ParseError,
-    SpecViolationError,
-    UnsupportedAdapterError,
-)
-from ccsds_data_messages.io import (
-    MessageFormat,
-    MessageReaderPort,
-    MessageType,
-    MessageWriterPort,
-    WriterOptions,
-    read,
-    read_ocm,
-    read_oem,
-    read_omm,
-    read_opm,
-    read_string,
-    write,
-    write_ocm,
-    write_oem,
-    write_omm,
-    write_opm,
-    write_string,
-)
-from ccsds_data_messages.models import (
-    OCM,
-    OEM,
-    OMM,
-    OPM,
-    CCSDSDataMessage,
-    oem_to_tracss_ocm,
-)
+from ccsds_data_messages.exceptions import CCSDSError
+from ccsds_data_messages.exceptions import DetectionError
+from ccsds_data_messages.exceptions import ParseError
+from ccsds_data_messages.exceptions import SpecViolationError
+from ccsds_data_messages.exceptions import UnsupportedAdapterError
+from ccsds_data_messages.io import MessageFormat
+from ccsds_data_messages.io import MessageReaderPort
+from ccsds_data_messages.io import MessageType
+from ccsds_data_messages.io import MessageWriterPort
+from ccsds_data_messages.io import WriterOptions
+from ccsds_data_messages.io import read
+from ccsds_data_messages.io import read_ocm
+from ccsds_data_messages.io import read_oem
+from ccsds_data_messages.io import read_omm
+from ccsds_data_messages.io import read_opm
+from ccsds_data_messages.io import read_string
+from ccsds_data_messages.io import write
+from ccsds_data_messages.io import write_ocm
+from ccsds_data_messages.io import write_oem
+from ccsds_data_messages.io import write_omm
+from ccsds_data_messages.io import write_opm
+from ccsds_data_messages.io import write_string
+from ccsds_data_messages.models import OCM
+from ccsds_data_messages.models import OEM
+from ccsds_data_messages.models import OMM
+from ccsds_data_messages.models import OPM
+from ccsds_data_messages.models import CCSDSDataMessage
+from ccsds_data_messages.models import oem_to_tracss_ocm
 
 __all__ = [
     # Exceptions
@@ -80,7 +74,7 @@ __all__ = [
     "ParseError",
     "SpecViolationError",
     "UnsupportedAdapterError",
-    # Concrete message types (spec abbreviations are canonical per CCSDS 502.0-B-3 §1.2)
+    # Concrete message types (spec abbreviations are canonical per CCSDS 502.0-B-3 section 1.2)
     "OCM",
     "OEM",
     "OMM",

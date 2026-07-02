@@ -2,21 +2,34 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Annotated, Any, ClassVar
+import warnings
+from datetime import UTC
+from datetime import datetime
+from typing import Annotated
+from typing import Any
+from typing import ClassVar
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import field_validator
+from pydantic import model_validator
 
-from ._aliases import CCSDSDate, Comment, NegativeMass, OPMVersionStr, OptionalCCSDSDate
-from ._base import (
-    BaseCovarianceMatrix,
-    BaseHeader,
-    BaseMetadata,
-    BaseSpacecraftParameters,
-)
+from ._aliases import CCSDSDate
+from ._aliases import Comment
+from ._aliases import NegativeMass
+from ._aliases import OPMVersionStr
+from ._aliases import OptionalCCSDSDate
+from ._base import BaseCovarianceMatrix
+from ._base import BaseHeader
+from ._base import BaseMetadata
+from ._base import BaseSpacecraftParameters
 from ._fields import FieldMetadata
-from .message import CCSDS_MODEL_CONFIG, CCSDSDataMessage
-from .values import CenterName, ManCovRefFrame, RefFrame, TimeSystem
+from .message import CCSDS_MODEL_CONFIG
+from .message import CCSDSDataMessage
+from .values import CenterName
+from .values import ManCovRefFrame
+from .values import RefFrame
+from .values import TimeSystem
 
 # Bodies for which a standard gravitational parameter is published by IAU/JPL and
 # therefore GM need not appear in the message.
@@ -327,7 +340,7 @@ class OPM(CCSDSDataMessage, BaseModel):
 
         class SpacecraftParameters(BaseSpacecraftParameters):
             """
-            Shared with OMM; see models/common/spacecraft.py for the full definition.
+            Shared with OMM; see ``BaseSpacecraftParameters`` in models/_base.py.
 
             Mass is conditionally mandatory when maneuvers are present;
             enforced in Data.validate_maneuver_requires_mass.
@@ -335,10 +348,13 @@ class OPM(CCSDSDataMessage, BaseModel):
 
         class CovarianceMatrix(BaseCovarianceMatrix):
             """
-            Shared with OMM; see models/common/covariance.py for the full definition.
+            Shared with OMM; see ``BaseCovarianceMatrix`` in models/_base.py.
 
             All-or-nothing block: if this model is present, all lower-triangular
-            elements are required. COV_REF_FRAME must match the metadata REF_FRAME.
+            elements are required. COV_REF_FRAME is optional and may legitimately
+            differ from the metadata REF_FRAME; per the spec it may be omitted when
+            identical to REF_FRAME, in which case the covariance is expressed in
+            REF_FRAME. No equality constraint is enforced.
             """
 
         class ManeuverParameters(BaseModel):
@@ -448,8 +464,6 @@ class OPM(CCSDSDataMessage, BaseModel):
 
             @model_validator(mode="after")
             def warn_non_normative_ref_frame(self) -> OPM.Data.ManeuverParameters:
-                import warnings
-
                 _normative = {f.value for f in ManCovRefFrame}
                 if (
                     self.man_ref_frame is not None

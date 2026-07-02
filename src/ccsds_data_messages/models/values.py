@@ -197,12 +197,12 @@ class RefFrame(StrEnum):
             RefFrame.parametric("MOON_PA", 421)        # "MOON_PA421"
 
         Raises:
-            ValueError: If the composed name does not match a recognised parametric pattern.
+            ValueError: If the composed name does not match a recognized parametric pattern.
         """
         name = f"{base}{suffix}"
         if not _REF_FRAME_PARAMETRIC_RE.fullmatch(name):
             raise ValueError(
-                f"{name!r} is not a recognised parametric RefFrame pattern. "
+                f"{name!r} is not a recognized parametric RefFrame pattern. "
                 "Expected one of: DTRFyyyy, GCRFn, ICRFn, ITRFyyyy, MOON_PAxxx."
             )
         return RefFrame(name)

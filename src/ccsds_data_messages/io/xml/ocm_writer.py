@@ -2,7 +2,7 @@
 XML adapter: Orbit Comprehensive Message writer.
 
 Produces OCM/XML per section 8.11, table 8-9.
-section 8.11.15: trajLine / covLine / manLine elements hold raw data strings.
+Section 8.11.15: trajLine / covLine / manLine elements hold raw data strings.
 """
 
 from __future__ import annotations
@@ -10,28 +10,24 @@ from __future__ import annotations
 # Build/serialize only in this module - parsing untrusted XML goes through
 # io.xml.parser, which uses defusedxml.
 import xml.etree.ElementTree as ET  # noqa: S405
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from ccsds_data_messages.io._ocm_maneuver import serialize_maneuver_rows
 from ccsds_data_messages.io.options import WriterOptions
-from ccsds_data_messages.io.xml._utils import (
-    _TAG_BODY,
-    _TAG_DATA,
-    _TAG_SEGMENT,
-    get_xml_line_tag,
-    get_xml_tag,
-    serialize_xml,
-    write_model,
-    write_xml_file,
-)
+from ccsds_data_messages.io.xml._utils import _TAG_BODY
+from ccsds_data_messages.io.xml._utils import _TAG_DATA
+from ccsds_data_messages.io.xml._utils import _TAG_SEGMENT
+from ccsds_data_messages.io.xml._utils import build_ndm_root
+from ccsds_data_messages.io.xml._utils import get_xml_line_tag
+from ccsds_data_messages.io.xml._utils import get_xml_tag
+from ccsds_data_messages.io.xml._utils import serialize_xml
+from ccsds_data_messages.io.xml._utils import write_model
+from ccsds_data_messages.io.xml._utils import write_xml_file
 from ccsds_data_messages.models.ocm import OCM
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-_XMLNS_XSI: str = "http://www.w3.org/2001/XMLSchema-instance"
-_NDM_SCHEMA: str = (
-    "https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-3.0.0-master-3.0.xsd"
-)
 
 # The 3 OCM block types with raw data lines (section 8.11.15). A Protocol can't
 # express "BaseModel with a data_lines attribute" (mypy rejects protocols that
@@ -67,8 +63,18 @@ def _write_block_with_lines(
     """
     section_element: ET.Element = ET.SubElement(data_element, get_xml_tag(type(block)))
     write_model(block, section_element, options=options)
-    # section 8.11.15: each raw data string becomes its own line element.
-    for line in block.data_lines:
+    # Section 8.11.15: each raw data string becomes its own line element. Maneuver
+    # rows are typed and serialized here; trajectory/covariance rows are raw strings.
+    lines: list[str] = (
+        serialize_maneuver_rows(
+            block.man_composition,
+            block.data_lines,
+            options.float_formats if options is not None else None,
+        )
+        if isinstance(block, OCM.ManeuverSpecification)
+        else block.data_lines
+    )
+    for line in lines:
         ET.SubElement(section_element, get_xml_line_tag(type(block))).text = line
 
 
@@ -85,16 +91,16 @@ class XMLOCMWriter:
         *,
         options: WriterOptions | None = None,
     ) -> ET.Element:
-        # OCM default: suppress default-valued fields so output matches spec fixtures.
+        # OCM default: suppress spec-default-valued fields so output matches the OCM
+        # fixtures, unless the caller set suppress_defaults explicitly.
+        base = options if options is not None else WriterOptions()
         effective_options = (
-            options if options is not None else WriterOptions(suppress_defaults=True)
+            base
+            if base.suppress_defaults is not None
+            else replace(base, suppress_defaults=True)
         )
 
-        root: ET.Element = ET.Element(get_xml_tag(OCM))
-        root.set("xmlns:xsi", _XMLNS_XSI)
-        root.set("xsi:noNamespaceSchemaLocation", _NDM_SCHEMA)
-        root.set("id", "CCSDS_OCM_VERS")
-        root.set("version", message.header.ccsds_ocm_vers)
+        root: ET.Element = build_ndm_root(OCM, message.header)
 
         header_element: ET.Element = ET.SubElement(root, get_xml_tag(OCM.Header))
         write_model(

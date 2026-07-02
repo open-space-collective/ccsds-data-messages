@@ -15,21 +15,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ccsds_data_messages.io._utils import build_keyword_map, map_kvs
-from ccsds_data_messages.io.kvn._utils import (
-    block_start_keyword,
-    required_block_delimiter_name,
-)
-from ccsds_data_messages.io.kvn.parser import (
-    ODM_MAX_LINE_LENGTH,
-    BlankLine,
-    BlockStartLine,
-    BlockStopLine,
-    CommentLine,
-    DataLine,
-    KeyValueLine,
-    parse_kvn,
-)
+from ccsds_data_messages.exceptions import ParseError
+from ccsds_data_messages.io._utils import build_keyword_map
+from ccsds_data_messages.io._utils import map_kvs
+from ccsds_data_messages.io.kvn._utils import block_start_keyword
+from ccsds_data_messages.io.kvn._utils import required_block_delimiter_name
+from ccsds_data_messages.io.kvn.parser import ODM_MAX_LINE_LENGTH
+from ccsds_data_messages.io.kvn.parser import BlankLine
+from ccsds_data_messages.io.kvn.parser import BlockStartLine
+from ccsds_data_messages.io.kvn.parser import BlockStopLine
+from ccsds_data_messages.io.kvn.parser import CommentLine
+from ccsds_data_messages.io.kvn.parser import DataLine
+from ccsds_data_messages.io.kvn.parser import KeyValueLine
+from ccsds_data_messages.io.kvn.parser import parse_kvn
 from ccsds_data_messages.models.oem import OEM
 
 if TYPE_CHECKING:
@@ -57,34 +55,41 @@ def _parse_ephemeris_line(line: str) -> OEM.Segment.EphemerisData.EphemerisDataL
     7 tokens = epoch + PV; 10 tokens = epoch + PV + accelerations (section 5.2.4.1-2).
     """
     tokens: list[str] = line.split()
+    if len(tokens) not in {7, 10}:
+        raise ParseError(
+            f"OEM/KVN: an ephemeris line must have 7 tokens (epoch + position + "
+            f"velocity) or 10 tokens (with accelerations), got {len(tokens)}: {line!r}"
+        )
+    epoch, *rest = tokens
+    try:
+        values = [float(token) for token in rest]
+    except ValueError as exc:
+        raise ParseError(
+            f"OEM/KVN: non-numeric value in ephemeris line: {line!r}"
+        ) from exc
     if len(tokens) == 7:
-        epoch, x, y, z, xd, yd, zd = tokens
+        x, y, z, xd, yd, zd = values
         return OEM.Segment.EphemerisData.EphemerisDataLine(
             epoch=epoch,
-            x=float(x),
-            y=float(y),
-            z=float(z),
-            x_dot=float(xd),
-            y_dot=float(yd),
-            z_dot=float(zd),
+            x=x,
+            y=y,
+            z=z,
+            x_dot=xd,
+            y_dot=yd,
+            z_dot=zd,
         )
-    if len(tokens) == 10:
-        epoch, x, y, z, xd, yd, zd, xdd, ydd, zdd = tokens
-        return OEM.Segment.EphemerisData.EphemerisDataLine(
-            epoch=epoch,
-            x=float(x),
-            y=float(y),
-            z=float(z),
-            x_dot=float(xd),
-            y_dot=float(yd),
-            z_dot=float(zd),
-            x_ddot=float(xdd),
-            y_ddot=float(ydd),
-            z_ddot=float(zdd),
-        )
-    raise ValueError(
-        f"An OEM ephemeris line must have 7 tokens (epoch + position + velocity) "
-        f"or 10 tokens (with accelerations), got {len(tokens)}: {line!r}"
+    x, y, z, xd, yd, zd, xdd, ydd, zdd = values
+    return OEM.Segment.EphemerisData.EphemerisDataLine(
+        epoch=epoch,
+        x=x,
+        y=y,
+        z=z,
+        x_dot=xd,
+        y_dot=yd,
+        z_dot=zd,
+        x_ddot=xdd,
+        y_ddot=ydd,
+        z_ddot=zdd,
     )
 
 
@@ -121,9 +126,9 @@ class KVNOEMReader:
             if not cur_cov_kvs:
                 return
             if len(cur_cov_vals) != 21:
-                raise ValueError(
-                    f"Each OEM covariance matrix must have exactly 21 lower-triangular "
-                    f"elements, got {len(cur_cov_vals)}."
+                raise ParseError(
+                    f"OEM/KVN: each covariance matrix must have exactly 21 "
+                    f"lower-triangular elements, got {len(cur_cov_vals)}."
                 )
             kwargs = map_kvs(cur_cov_kvs, [], _CML)
             for i, fname in enumerate(_COV_FIELD_ORDER):
@@ -226,7 +231,13 @@ class KVNOEMReader:
                     pending.clear()
                     ephem_lines.append(line.text)
                 elif state == "cov":
-                    cur_cov_vals.extend(float(t) for t in line.text.split())
+                    try:
+                        cur_cov_vals.extend(float(t) for t in line.text.split())
+                    except ValueError as exc:
+                        raise ParseError(
+                            f"OEM/KVN: non-numeric value in covariance line: "
+                            f"{line.text!r}"
+                        ) from exc
                 continue
 
         # Flush the final segment when there's no trailing COVARIANCE block.

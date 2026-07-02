@@ -19,7 +19,9 @@ in the spec: calendar (``YYYY-MM-DDThh:mm:ss[.d+][Z]``) and day-of-year
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 from pydantic.dataclasses import dataclass
 
@@ -154,34 +156,34 @@ def validate_time_tag(v: str, field_name: str = "value") -> str:
 
 def _normalize_epoch(epoch: str) -> str:
     """
-    Return a lexicographically sortable calendar-format string for a CCSDS epoch.
+    Return a canonical, lexicographically sortable string for a CCSDS absolute epoch.
 
-    Converts day-of-year format to calendar format when necessary (7.5.10).
-    Both formats sort correctly by string comparison when used consistently;
-    mixed sequences produce incorrect comparisons, so day-of-year epochs are
-    normalized to calendar format before comparison.
+    Parses the epoch (calendar or day-of-year, 7.5.10) and re-emits it in a single
+    fixed-width calendar form with microsecond precision, so that:
+
+    - day-of-year and calendar spellings of the same instant compare equal, and
+    - fractional-second spellings of the same instant compare equal - e.g.
+      ``...:00``, ``...:00.0`` and ``...:00.000`` all normalize identically.
+
+    This makes ``<`` / ``==`` on the returned strings agree with chronological order
+    and equality, which the OEM/OCM strictly-increasing and no-duplicate checks rely
+    on: without canonical fractional seconds, ``...:00`` and ``...:00.0`` sort as
+    distinct (the shorter string sorts first), so a functional duplicate would slip
+    past a strictly-increasing check. Sub-microsecond precision is truncated (Python
+    ``datetime`` limit, 7.5.10); two epochs differing only below 1 microsecond
+    compare equal.
 
     Args:
-        epoch (str): A CCSDS epoch string in either calendar
-            (``YYYY-MM-DDThh:mm:ss[.d][Z]``) or day-of-year
-            (``YYYY-DOYThh:mm:ss[.d][Z]``) format.
+        epoch (str): A CCSDS *absolute* epoch string in calendar
+            (``YYYY-MM-DDThh:mm:ss[.d+][Z]``) or day-of-year
+            (``YYYY-DOYThh:mm:ss[.d+][Z]``) format. Callers pass only
+            already-validated absolute dates; relative time tags are compared on
+            their own numeric path.
 
     Returns:
-        str: A normalized calendar-format epoch string suitable for
-        lexicographic sorting.
+        str: A canonical ``YYYY-MM-DDThh:mm:ss.ffffff`` string.
     """
-    normalized: str = epoch.rstrip("Z")
-    if (
-        len(normalized) > 8
-        and normalized[4] == "-"
-        and normalized[8] == "T"
-        and normalized[5:8].isdigit()
-    ):
-        year: int = int(normalized[:4])
-        doy: int = int(normalized[5:8])
-        date: str = (datetime(year, 1, 1) + timedelta(days=doy - 1)).strftime("%Y-%m-%d")  # noqa: DTZ001
-        return date + "T" + normalized[9:]
-    return normalized
+    return _parse_ccsds_epoch(epoch).strftime("%Y-%m-%dT%H:%M:%S.%f")
 
 
 def _parse_ccsds_epoch(epoch: str) -> datetime:
@@ -202,7 +204,7 @@ def _parse_ccsds_epoch(epoch: str) -> datetime:
         # timedelta arithmetic raises ValueError for doy > 365/366 implicitly
         # because the resulting datetime would be in the next year - detect it:
         if (doy := int(date_part[5:8])) < 1:
-            raise ValueError(f"Day-of-year must be ≥ 1, got {doy}")
+            raise ValueError(f"Day-of-year must be >= 1, got {doy}")
         base_date: datetime = datetime(year, 1, 1, tzinfo=UTC) + timedelta(days=doy - 1)
         if base_date.year != year:
             raise ValueError(
@@ -228,7 +230,7 @@ def _parse_ccsds_epoch(epoch: str) -> datetime:
 
     # Calendar: Python datetime is limited to microsecond precision (6 decimal
     # places). fromisoformat accepts spec-valid epochs with up to 16 fractional
-    # digits (§7.5.10) but silently truncates beyond microseconds.
+    # digits (section 7.5.10) but silently truncates beyond microseconds.
     # fromisoformat raises ValueError for out-of-range month/day.
     return datetime.fromisoformat(normalized).replace(tzinfo=UTC)
 

@@ -17,14 +17,12 @@ from ._epoch import _normalize_epoch
 from ._fields import FieldMetadata
 from .ocm import OCM
 from .oem import OEM
-from .values import (
-    CenterName,
-    CovarianceOrdering,
-    ExtendedManCovRefFrame,
-    ManCovRefFrame,
-    OrbitalElements,
-    RefFrame,
-)
+from .values import CenterName
+from .values import CovarianceOrdering
+from .values import ExtendedManCovRefFrame
+from .values import ManCovRefFrame
+from .values import OrbitalElements
+from .values import RefFrame
 
 _VALID_TRAJ_BASIS = frozenset({"OPERATIONAL", "CANDIDATE"})
 
@@ -84,7 +82,7 @@ def oem_to_tracss_ocm(
     ``COV_ORDERING = LTM``.
 
     The OCM ``EPOCH_TZERO`` is set to the epoch of the first ephemeris data line.
-    Header fields are taken from the OEM; ``OEM.validate_single_object`` (§5.1.3)
+    Header fields are taken from the OEM; ``OEM.validate_single_object`` (section 5.1.3)
     already guarantees every segment agrees on ``object_name`` and ``object_id``.
 
     Covariance note: OEM permits a different ``COV_REF_FRAME`` per epoch entry
@@ -112,7 +110,7 @@ def oem_to_tracss_ocm(
         useable_record_padding: Number of data lines at each edge to treat as
             non-useable. ``USEABLE_START_TIME`` is set to
             ``lines[padding].epoch`` and ``USEABLE_STOP_TIME`` to
-            ``lines[-(padding+1)].epoch``. TraCSS requires ≥5 lines on each
+            ``lines[-(padding+1)].epoch``. TraCSS requires >=5 lines on each
             side, so each segment must have at least
             ``2 * useable_record_padding + 1`` data lines. Default ``5``.
 
@@ -136,7 +134,7 @@ def oem_to_tracss_ocm(
             "TraCSS requires MESSAGE_ID. Supply message_id= or ensure the OEM header has one."
         )
 
-    # OEM.validate_single_object (§5.1.3) already guarantees every segment agrees
+    # OEM.validate_single_object (section 5.1.3) already guarantees every segment agrees
     # on object_name and object_id at construction time - unreachable here.
     first_seg = oem.segments[0]
 
@@ -259,7 +257,7 @@ def _segment_to_traj(
     if useable_record_padding > 0:
         # Always recompute from data lines when padding is requested; the OEM's
         # own useable_start/stop may sit at the first/last record which violates
-        # the requirement for ≥padding preceding/following lines.
+        # the requirement for >=padding preceding/following lines.
         if len(lines) > 2 * useable_record_padding:
             kwargs["useable_start_time"] = lines[useable_record_padding].epoch
             kwargs["useable_stop_time"] = lines[-(useable_record_padding + 1)].epoch

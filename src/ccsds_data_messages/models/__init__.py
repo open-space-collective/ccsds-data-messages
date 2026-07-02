@@ -1,4 +1,4 @@
-# Copyright © Loft Orbital Solutions Inc.
+# Copyright (c) Loft Orbital Solutions Inc.
 """Domain models for the CCSDS Navigation Data Message types."""
 
 from typing import TypeAlias
@@ -33,7 +33,7 @@ OEMCovarianceMatrixLines: TypeAlias = OEM.Segment.CovarianceMatrix.CovarianceMat
 __all__ = [
     # Conversions
     "oem_to_tracss_ocm",
-    # Concrete message types (spec abbreviations are canonical per CCSDS 502.0-B-3 §1.2)
+    # Concrete message types (spec abbreviations are canonical per CCSDS 502.0-B-3 section 1.2)
     "OCM",
     "OEM",
     "OMM",

@@ -89,7 +89,7 @@ def _classify(stripped_line: str) -> KVNLine:
         return CommentLine(text=match.group(1))
 
     if _BARE_COMMENT_RE.match(stripped_line):
-        # §7.8.5: COMMENT must be followed by at least one space. A bare COMMENT
+        # Section 7.8.5: COMMENT must be followed by at least one space. A bare COMMENT
         # falls through to DataLine like any other unrecognized line, which all
         # readers silently skip - warn so the issue doesn't vanish without a trace.
         # No stacklevel: it would only point inside parse_kvn's own comprehension,
@@ -98,7 +98,7 @@ def _classify(stripped_line: str) -> KVNLine:
         # pattern (it's a valid all-caps identifier), which would otherwise return
         # early as a bare-keyword DataLine and skip this warning entirely.
         warnings.warn(  # noqa: B028
-            "Bare 'COMMENT' line (no trailing space) is not valid CCSDS KVN (§7.8.5) "
+            "Bare 'COMMENT' line (no trailing space) is not valid CCSDS KVN (section 7.8.5) "
             "and will be ignored by all readers.",
             UserWarning,
         )
@@ -121,13 +121,13 @@ def _classify(stripped_line: str) -> KVNLine:
         return KeyValueLine(keyword=keyword, value=value)
 
     if _MIXED_CASE_KV_RE.match(stripped_line):
-        # §7.4.4: keywords must be uppercase. A mixed-case 'Key = value' line falls
+        # Section 7.4.4: keywords must be uppercase. A mixed-case 'Key = value' line falls
         # through to DataLine like any other unrecognized line and is silently
         # skipped by all readers - warn so the issue doesn't vanish without a trace.
         # No stacklevel: see note above.
         warnings.warn(  # noqa: B028
             f"Ignoring keyword line with non-uppercase keyword: {stripped_line!r}. "
-            "CCSDS KVN requires uppercase keywords (§7.4.4).",
+            "CCSDS KVN requires uppercase keywords (section 7.4.4).",
             UserWarning,
         )
 
@@ -144,9 +144,9 @@ def parse_kvn(text: str, *, max_line_length: int | None = None) -> list[KVNLine]
     Args:
         text: Full text of the KVN document.
         max_line_length: When set, warn (do not reject) on lines exceeding this
-            many characters, excluding the line terminator (§7.3.2: 254 for
+            many characters, excluding the line terminator (section 7.3.2: 254 for
             OPM/OMM/OEM). Pass None (the default) for formats with no limit,
-            e.g. OCM (§7.3.3).
+            e.g. OCM (section 7.3.3).
 
     Returns:
         Ordered list of KVNLine objects, one per input line.
@@ -159,13 +159,13 @@ def parse_kvn(text: str, *, max_line_length: int | None = None) -> list[KVNLine]
         if max_line_length is not None and len(raw_line) > max_line_length:
             warnings.warn(  # noqa: B028
                 f"Line {line_number} is {len(raw_line)} characters, exceeding the "
-                f"{max_line_length}-character limit (§7.3.2): {raw_line[:80]!r}...",
+                f"{max_line_length}-character limit (section 7.3.2): {raw_line[:80]!r}...",
                 UserWarning,
             )
         if bad_chars := sorted(set(_NON_PRINTABLE_ASCII_RE.findall(raw_line))):
             warnings.warn(  # noqa: B028
                 f"Line {line_number} contains non-printable-ASCII or control "
-                f"characters {bad_chars!r} (§7.3.4): {raw_line[:80]!r}...",
+                f"characters {bad_chars!r} (section 7.3.4): {raw_line[:80]!r}...",
                 UserWarning,
             )
     return [_classify(raw_line.strip()) for raw_line in lines]

@@ -12,10 +12,8 @@ from pathlib import Path
 
 from ccsds_data_messages.exceptions import UnsupportedAdapterError
 from ccsds_data_messages.io._utils import _normalize_fmt
-from ccsds_data_messages.io.format import (
-    MessageFormat,
-    MessageType,
-)
+from ccsds_data_messages.io.format import MessageFormat
+from ccsds_data_messages.io.format import MessageType
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.io.registry import get_writer
 from ccsds_data_messages.models import CCSDSDataMessage

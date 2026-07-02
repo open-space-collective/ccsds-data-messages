@@ -19,13 +19,11 @@ from typing import TYPE_CHECKING
 
 from ccsds_data_messages.io._utils import build_keyword_map
 from ccsds_data_messages.io.kvn._utils import to_kwargs as _to_kwargs
-from ccsds_data_messages.io.kvn.parser import (
-    ODM_MAX_LINE_LENGTH,
-    BlankLine,
-    CommentLine,
-    KeyValueLine,
-    parse_kvn,
-)
+from ccsds_data_messages.io.kvn.parser import ODM_MAX_LINE_LENGTH
+from ccsds_data_messages.io.kvn.parser import BlankLine
+from ccsds_data_messages.io.kvn.parser import CommentLine
+from ccsds_data_messages.io.kvn.parser import KeyValueLine
+from ccsds_data_messages.io.kvn.parser import parse_kvn
 from ccsds_data_messages.models.omm import OMM
 
 if TYPE_CHECKING:
@@ -88,7 +86,7 @@ class KVNOMMReader:
                 continue
 
             if line.keyword.startswith("USER_DEFINED_"):
-                # §7.8.8: a COMMENT at the start of the User-Defined Parameters
+                # Section 7.8.8: a COMMENT at the start of the User-Defined Parameters
                 # block is valid placement, but UserDefinedParameters has no
                 # comment field to attribute it to - known limitation, dropped.
                 pending_comments.clear()

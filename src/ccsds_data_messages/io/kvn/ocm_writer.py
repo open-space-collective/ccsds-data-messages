@@ -25,9 +25,13 @@ Spec references:
 from __future__ import annotations
 
 import io
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from ccsds_data_messages.io.kvn._utils import SupportsWrite, emit_block, guard_lines
+from ccsds_data_messages.io._ocm_maneuver import serialize_maneuver_rows
+from ccsds_data_messages.io.kvn._utils import SupportsWrite
+from ccsds_data_messages.io.kvn._utils import emit_block
+from ccsds_data_messages.io.kvn._utils import guard_lines
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.models.ocm import OCM
 
@@ -55,17 +59,23 @@ class KVNOCMWriter:
         Args:
             message (OCM): Validated OCM instance to serialize.
             out (SupportsWrite): Destination text stream.
-            options (WriterOptions | None): Formatting options. When omitted,
-                ``WriterOptions(suppress_defaults=True)`` is used - OCM spec
-                fixtures omit keyword lines whose value is the spec-defined
-                default (e.g. ``TIME_SYSTEM = UTC``, ``DC_TYPE = CONTINUOUS``).
+            options (WriterOptions | None): Formatting options. When
+                ``suppress_defaults`` is left unspecified (the ``None`` sentinel,
+                which is also the case when no options are passed at all), the OCM
+                writer suppresses spec-defaults so output matches the OCM fixtures
+                (e.g. ``TIME_SYSTEM = UTC``, ``DC_TYPE = CONTINUOUS``). An explicit
+                ``True``/``False`` overrides that.
         """
-        # OCM default: suppress default-valued fields so output matches spec fixtures.
+        # OCM default: suppress spec-default-valued fields so output matches the OCM
+        # fixtures, unless the caller set suppress_defaults explicitly.
+        base = options if options is not None else WriterOptions()
         effective_options = (
-            options if options is not None else WriterOptions(suppress_defaults=True)
+            base
+            if base.suppress_defaults is not None
+            else replace(base, suppress_defaults=True)
         )
 
-        # §7.3.3: OCM has no line-length limit, unlike OPM/OMM/OEM; §7.3.4 (ASCII-only)
+        # Section 7.3.3: OCM has no line-length limit, unlike OPM/OMM/OEM; section 7.3.4 (ASCII-only)
         # still applies, so check that but not length.
         out = guard_lines(out, max_line_length=None)
 
@@ -110,7 +120,11 @@ class KVNOCMWriter:
                 emit_block(
                     man_block,
                     out,
-                    extra_lines=man_block.data_lines,
+                    extra_lines=serialize_maneuver_rows(
+                        man_block.man_composition,
+                        man_block.data_lines,
+                        effective_options.float_formats,
+                    ),
                     options=effective_options,
                 )
                 out.write("\n")

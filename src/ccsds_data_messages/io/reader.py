@@ -19,9 +19,12 @@ from typing import cast
 import pydantic
 
 from ccsds_data_messages.exceptions import SpecViolationError
-from ccsds_data_messages.io._utils import _normalize_fmt, _normalize_type
-from ccsds_data_messages.io.detection import detect_format, detect_message_type
-from ccsds_data_messages.io.format import MessageFormat, MessageType
+from ccsds_data_messages.io._utils import _normalize_fmt
+from ccsds_data_messages.io._utils import _normalize_type
+from ccsds_data_messages.io.detection import detect_format
+from ccsds_data_messages.io.detection import detect_message_type
+from ccsds_data_messages.io.format import MessageFormat
+from ccsds_data_messages.io.format import MessageType
 from ccsds_data_messages.io.registry import get_reader
 from ccsds_data_messages.models import CCSDSDataMessage
 from ccsds_data_messages.models.ocm import OCM
@@ -60,6 +63,8 @@ def read(
 
     Raises:
         DetectionError: If format or message type is omitted and cannot be determined.
+        UnsupportedAdapterError: If the ``(fmt, message_type)`` pair is not registered.
+        ParseError: If the content is malformed and cannot be tokenized into a model.
         SpecViolationError: If the file content fails domain model validation.
 
     Example:
@@ -104,6 +109,7 @@ def read_string(
 
     Raises:
         UnsupportedAdapterError: If the ``(fmt, message_type)`` pair is not registered.
+        ParseError: If the content is malformed and cannot be tokenized into a model.
         SpecViolationError: If the content fails domain model validation.
 
     Example:

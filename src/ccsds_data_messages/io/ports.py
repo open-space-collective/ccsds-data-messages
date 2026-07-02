@@ -11,7 +11,8 @@ of format or message type.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
+from typing import Protocol
 
 from ccsds_data_messages.io.options import WriterOptions
 from ccsds_data_messages.models import CCSDSDataMessage

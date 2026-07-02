@@ -12,23 +12,17 @@ import xml.etree.ElementTree as ET  # noqa: S405
 from typing import TYPE_CHECKING
 
 from ccsds_data_messages.io.options import WriterOptions
-from ccsds_data_messages.io.xml._utils import (
-    _TAG_BODY,
-    _TAG_SEGMENT,
-    get_xml_tag,
-    serialize_xml,
-    write_model,
-    write_xml_file,
-)
+from ccsds_data_messages.io.xml._utils import _TAG_BODY
+from ccsds_data_messages.io.xml._utils import _TAG_SEGMENT
+from ccsds_data_messages.io.xml._utils import build_ndm_root
+from ccsds_data_messages.io.xml._utils import get_xml_tag
+from ccsds_data_messages.io.xml._utils import serialize_xml
+from ccsds_data_messages.io.xml._utils import write_model
+from ccsds_data_messages.io.xml._utils import write_xml_file
 from ccsds_data_messages.models.omm import OMM
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-_XMLNS_XSI: str = "http://www.w3.org/2001/XMLSchema-instance"
-_NDM_SCHEMA: str = (
-    "https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-3.0.0-master-3.0.xsd"
-)
 
 
 class XMLOMMWriter:
@@ -44,11 +38,7 @@ class XMLOMMWriter:
         *,
         options: WriterOptions | None = None,
     ) -> ET.Element:
-        root: ET.Element = ET.Element(get_xml_tag(OMM))
-        root.set("xmlns:xsi", _XMLNS_XSI)
-        root.set("xsi:noNamespaceSchemaLocation", _NDM_SCHEMA)
-        root.set("id", "CCSDS_OMM_VERS")
-        root.set("version", message.header.ccsds_omm_vers)
+        root: ET.Element = build_ndm_root(OMM, message.header)
 
         header_element: ET.Element = ET.SubElement(root, get_xml_tag(OMM.Header))
         write_model(
