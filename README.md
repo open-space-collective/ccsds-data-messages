@@ -1,10 +1,23 @@
 # ccsds-data-messages
 
+[![CI](https://github.com/open-space-collective/orbit-data-messages/actions/workflows/ci.yml/badge.svg)](https://github.com/open-space-collective/orbit-data-messages/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/ccsds-data-messages.svg)](https://pypi.org/project/ccsds-data-messages/)
+[![Python versions](https://img.shields.io/pypi/pyversions/ccsds-data-messages.svg)](https://pypi.org/project/ccsds-data-messages/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 A Python library to read, write, and validate CCSDS Orbit Data Messages (ODM) -
 OEM, OMM, OPM, and OCM - in both KVN and XML formats.
 
 Implements CCSDS 502.0-B-3. The domain models permit exactly what the spec permits
 and reject exactly what the spec rejects.
+
+> [!WARNING]
+> **Disclaimer.** This library handles message data; it is not a source of
+> authoritative orbital information. Passing validation does not mean the numbers in a
+> message are accurate or safe to act on. Do not rely on it as the sole basis for any
+> operational, collision-avoidance, or debris-tracking decision, and always verify
+> inputs and outputs independently. The authors and Loft Orbital accept no liability for
+> any resulting loss or damage. See [DISCLAIMER.md](DISCLAIMER.md) for the full notice.
 
 ## Installation
 

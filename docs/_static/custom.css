@@ -1,0 +1,17 @@
+/* Widen the RTD content area (theme default is 800px) and make it always
+   reach the bottom of the viewport. The theme's own height:100% never
+   resolves because the wrapper uses min-height rather than an explicit
+   height, so short pages leave the grey body background exposed below the
+   content; min-height:100vh forces the content box to fill the screen. */
+.wy-nav-content {
+    max-width: 1100px;
+    min-height: 100vh;
+}
+
+/* Normalize sidebar menu font size across all toctree depths.
+   The theme sets .wy-menu-vertical a to 90% and adds a compounding
+   .9em on l3/l4, making deeper entries progressively smaller. */
+.wy-menu-vertical li.toctree-l3,
+.wy-menu-vertical li.toctree-l4 {
+    font-size: 100%;
+}

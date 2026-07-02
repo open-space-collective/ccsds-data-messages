@@ -5,10 +5,12 @@
 #  make dev          - drop into a bash shell inside the dev container
 #  make test         - run pytest
 #  make lint         - ruff check (linter)
-#  make format       - ruff format (auto-fix formatting)
+#  make format       - ruff check --fix (imports) + ruff format (auto-fix formatting)
 #  make format-check - ruff format --check (CI gate, no writes)
 #  make typecheck    - mypy
 #  make check        - lint + format-check + typecheck + test  (full CI gate)
+#  make docs         - build the HTML documentation with Sphinx
+#  make docs-serve   - build the docs and serve them at http://localhost:8000
 #  make clean        - remove caches and build artifacts
 #
 # Requirements (local workflow):
@@ -24,7 +26,7 @@ DEV_USERNAME   := $(shell whoami)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help dev-image dev test lint format format-check typecheck check clean
+.PHONY: help dev-image dev test lint format format-check typecheck check docs docs-serve clean
 
 help: ## Show this help message
 	@awk 'BEGIN { FS = "[ \t]+##[ \t]*" } /^[a-zA-Z_-]+:.*##/ { \
@@ -60,6 +62,7 @@ lint: ## Lint with ruff
 	uv run ruff check .
 
 format: ## Format with ruff (applies changes)
+	uv run ruff check --fix --select I .
 	uv run ruff format .
 
 format-check: ## Check formatting without applying changes
@@ -73,6 +76,12 @@ pylint: ## Lint with pylint
 
 check: lint format-check typecheck pylint test ## Run all checks - lint, format, typecheck, pylint, tests
 
+docs: ## Build the HTML documentation (Sphinx + Read the Docs theme)
+	uv run --group docs sphinx-build -b html -W --keep-going docs docs/_build/html
+
+docs-serve: docs ## Build the docs, then serve them locally at http://localhost:8000
+	uv run --group docs python -m http.server 8000 --directory docs/_build/html
+
 clean: ## Remove caches and build artifacts
-	rm -rf .ruff_cache .mypy_cache .pytest_cache dist/
+	rm -rf .ruff_cache .mypy_cache .pytest_cache dist/ docs/_build/
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
