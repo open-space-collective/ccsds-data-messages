@@ -6,10 +6,10 @@ labels: enhancement
 
 **What problem does this solve?**
 
-**Proposed API or behaviour**
+**Proposed API or behavior**
 ```python
 
 ```
 
 **Relevant CCSDS spec section (if applicable)**
-<!-- e.g. CCSDS 502.0-B-3 §5.2.4.6 -->
+<!-- e.g. CCSDS 502.0-B-3 5.2.4.6 -->
