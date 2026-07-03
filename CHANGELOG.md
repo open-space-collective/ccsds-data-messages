@@ -23,5 +23,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   additional formats or message types.
 - `oem_to_tracss_ocm` conversion from OEM to a TraCSS-compliant OCM.
 
-[Unreleased]: https://github.com/open-space-collective/orbit-data-messages/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/open-space-collective/orbit-data-messages/releases/tag/v0.1.0
+[Unreleased]: https://github.com/open-space-collective/ccsds-data-messages/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/open-space-collective/ccsds-data-messages/releases/tag/v0.1.0

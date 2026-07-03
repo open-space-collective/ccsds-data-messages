@@ -1,6 +1,6 @@
 # ccsds-data-messages
 
-[![CI](https://github.com/open-space-collective/orbit-data-messages/actions/workflows/ci.yml/badge.svg)](https://github.com/open-space-collective/orbit-data-messages/actions/workflows/ci.yml)
+[![CI](https://github.com/open-space-collective/ccsds-data-messages/actions/workflows/ci.yml/badge.svg)](https://github.com/open-space-collective/ccsds-data-messages/actions/workflows/ci.yml)
 [![PyPI version](https://img.shields.io/pypi/v/ccsds-data-messages.svg)](https://pypi.org/project/ccsds-data-messages/)
 [![Python versions](https://img.shields.io/pypi/pyversions/ccsds-data-messages.svg)](https://pypi.org/project/ccsds-data-messages/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)

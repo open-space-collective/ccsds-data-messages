@@ -43,11 +43,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/open-space-collective/orbit-data-messages"
-Source = "https://github.com/open-space-collective/orbit-data-messages"
-Documentation = "https://open-space-collective.github.io/orbit-data-messages/"
-Issues = "https://github.com/open-space-collective/orbit-data-messages/issues"
-Changelog = "https://github.com/open-space-collective/orbit-data-messages/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/open-space-collective/ccsds-data-messages"
+Source = "https://github.com/open-space-collective/ccsds-data-messages"
+Documentation = "https://open-space-collective.github.io/ccsds-data-messages/"
+Issues = "https://github.com/open-space-collective/ccsds-data-messages/issues"
+Changelog = "https://github.com/open-space-collective/ccsds-data-messages/blob/main/CHANGELOG.md"
 
 
 [[tool.uv.index]]
