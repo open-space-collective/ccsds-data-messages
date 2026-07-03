@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-caching: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --all-groups
+
+      - name: Lint
+        run: make lint
+
+      - name: Format check
+        run: make format-check
+
+      - name: Type check
+        run: make typecheck
+
+      - name: Pylint
+        run: make pylint
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-caching: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --all-groups --python ${{ matrix.python-version }}
+
+      - name: Test
+        run: make test

@@ -1,0 +1,56 @@
+name: Docs
+
+# Builds the Sphinx documentation on every push and pull request using the same
+# `make docs` command developers run locally, so broken docs fail CI. On a push to
+# main, the built site is deployed to GitHub Pages.
+#
+# One-time setup: in the repository settings, set Pages > Source to "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Allow only one concurrent deployment, and let a newer run cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # hatch-vcs needs full history + tags to derive the version
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-caching: true
+
+      - name: Install dependencies
+        run: uv sync --group docs
+
+      - name: Build documentation
+        run: make docs
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/_build/html
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write      # deploy to GitHub Pages
+      id-token: write   # verify the deployment originates from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
