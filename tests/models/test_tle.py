@@ -162,7 +162,7 @@ class TestTleStructure:
 
     def test_three_line_prepends_title(self):
         tle = omm_to_tle(_sgp4_omm(metadata={"object_name": "TESTSAT"}))
-        assert tle.three_line() == f"0 TESTSAT\n{tle.line1}\n{tle.line2}"
+        assert tle.three_line() == f"TESTSAT\n{tle.line1}\n{tle.line2}"
 
 
 class TestAlpha5:
