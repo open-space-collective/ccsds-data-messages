@@ -64,8 +64,10 @@ from ccsds_data_messages.models import OCM
 from ccsds_data_messages.models import OEM
 from ccsds_data_messages.models import OMM
 from ccsds_data_messages.models import OPM
+from ccsds_data_messages.models import TLE
 from ccsds_data_messages.models import CCSDSDataMessage
 from ccsds_data_messages.models import oem_to_tracss_ocm
+from ccsds_data_messages.models import omm_to_tle
 
 __all__ = [
     # Exceptions
@@ -79,10 +81,13 @@ __all__ = [
     "OEM",
     "OMM",
     "OPM",
+    # Non-message value objects
+    "TLE",
     # Abstract base
     "CCSDSDataMessage",
     # Conversions
     "oem_to_tracss_ocm",
+    "omm_to_tle",
     # Typed enums
     "MessageFormat",
     "MessageReaderPort",

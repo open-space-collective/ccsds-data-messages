@@ -15,12 +15,17 @@ from typing import Any
 
 from ._epoch import _normalize_epoch
 from ._fields import FieldMetadata
+from ._tle_codec import _encode_lines
+from ._tle_codec import _TleFields
 from .ocm import OCM
 from .oem import OEM
+from .omm import OMM
+from .tle import TLE
 from .values import CenterName
 from .values import CovarianceOrdering
 from .values import ExtendedManCovRefFrame
 from .values import ManCovRefFrame
+from .values import MeanElementTheory
 from .values import OrbitalElements
 from .values import RefFrame
 
@@ -353,3 +358,95 @@ def _format_cov_line(line: OEM.Segment.CovarianceMatrix.CovarianceMatrixLines) -
         line.cz_dot_z_dot,
     ]
     return line.epoch + " " + " ".join(_fmt(e, _COVARIANCE_FORMAT_SPEC) for e in elements)
+
+
+# Mean element theories that cannot round-trip to a classic NORAD TLE: DSST/USM do
+# not populate the TLE fields, and SGP4-XP carries BTERM/AGOM drag and SRP terms that
+# the standard two-line format has no columns for.
+_TLE_INCOMPATIBLE_THEORIES = frozenset(
+    {
+        MeanElementTheory.SGP4_XP,
+        MeanElementTheory.DSST,
+        MeanElementTheory.USM,
+    }
+)
+
+
+def omm_to_tle(omm: OMM) -> TLE:
+    """
+    Convert an OMM to a NORAD Two-Line Element set (TLE).
+
+    Returns a :class:`~ccsds_data_messages.models.tle.TLE` value object with the
+    Alpha-5 satellite-number encoding. ``str(tle)`` gives the two-line form and
+    ``tle.three_line()`` prepends the space-track ``"0 NAME"`` title line. The
+    fixed-column encoding is handled by ``models/_tle_codec.py``.
+
+    ``MEAN_MOTION_DOT`` and ``MEAN_MOTION_DDOT`` are written to the TLE first/second
+    derivative fields unchanged: they already hold the SGP Taylor-series terms
+    (n-dot/2 and n-ddot/6). Missing optional fields default per de-facto TLE
+    convention: ``CLASSIFICATION_TYPE`` to ``U``, ``EPHEMERIS_TYPE`` to ``0``, and
+    absent BSTAR / derivative / element-set / revolution values to zero.
+
+    Args:
+        omm: A validated :class:`OMM`. Must provide ``MEAN_MOTION`` (not only
+            ``SEMI_MAJOR_AXIS``) and a ``tle_related_parameters`` block with a
+            ``NORAD_CAT_ID``.
+
+    Returns:
+        A :class:`TLE` value object.
+
+    Raises:
+        ValueError: If ``MEAN_ELEMENT_THEORY`` is DSST, USM, or SGP4-XP (or BTERM is
+            present); if ``MEAN_MOTION`` is absent; if the TLE-related block or
+            ``NORAD_CAT_ID`` is absent; or if ``NORAD_CAT_ID`` exceeds the Alpha-5
+            maximum (339999).
+    """
+    line1, line2 = _encode_lines(_omm_to_tle_fields(omm))
+    return TLE(name=omm.metadata.object_name, line1=line1, line2=line2)
+
+
+def _omm_to_tle_fields(omm: OMM) -> _TleFields:
+    """Map a convertible OMM onto ``_TleFields``, raising ``ValueError`` otherwise."""
+    if omm.metadata.mean_element_theory in _TLE_INCOMPATIBLE_THEORIES:
+        raise ValueError(
+            f"MEAN_ELEMENT_THEORY={omm.metadata.mean_element_theory} cannot be "
+            "represented as a classic NORAD TLE."
+        )
+
+    mke = omm.data.mean_keplerian_elements
+    if (mean_motion := mke.mean_motion) is None:
+        raise ValueError(
+            "MEAN_MOTION is required to generate a TLE; this OMM provides only "
+            "SEMI_MAJOR_AXIS."
+        )
+
+    tle = omm.data.tle_related_parameters
+    if tle is None or tle.norad_cat_id is None:
+        raise ValueError(
+            "tle_related_parameters with NORAD_CAT_ID is required to generate a TLE."
+        )
+    if tle.bterm is not None:
+        raise ValueError(
+            "OMMs using the SGP4-XP ballistic coefficient (BTERM) cannot be "
+            "represented as a classic NORAD TLE."
+        )
+
+    return _TleFields(
+        norad_cat_id=tle.norad_cat_id,
+        classification=(tle.classification_type or "U")[0],
+        international_designator=omm.metadata.object_id,
+        epoch=mke.epoch,
+        time_system=omm.metadata.time_system,
+        n_dot=tle.mean_motion_dot or 0.0,
+        n_ddot=tle.mean_motion_ddot or 0.0,
+        bstar=tle.bstar or 0.0,
+        ephemeris_type=tle.ephemeris_type or 0,
+        element_set_no=tle.element_set_no or 0,
+        inclination=mke.inclination,
+        ra_of_asc_node=mke.ra_of_asc_node,
+        eccentricity=mke.eccentricity,
+        arg_of_pericenter=mke.arg_of_pericenter,
+        mean_anomaly=mke.mean_anomaly,
+        mean_motion=mean_motion,
+        rev_at_epoch=tle.rev_at_epoch or 0,
+    )
