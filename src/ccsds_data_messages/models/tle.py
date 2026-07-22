@@ -57,8 +57,8 @@ class TLE(BaseModel):
         return f"{self.line1}\n{self.line2}"
 
     def three_line(self) -> str:
-        """Return the space-track three-line form: ``"0 NAME"`` then the two lines."""
-        return f"0 {self.name}\n{self.line1}\n{self.line2}"
+        """Return the space-track three-line form: ``"NAME"`` then the two lines."""
+        return f"{self.name}\n{self.line1}\n{self.line2}"
 
     def __str__(self) -> str:
         return self.two_line()
