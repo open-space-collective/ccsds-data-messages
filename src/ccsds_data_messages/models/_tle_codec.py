@@ -118,8 +118,7 @@ def _intl_designator(object_id: str) -> str:
     Produces last-two-year + launch-number + piece (left-justified in three
     columns). Non-standard identifiers (e.g. ``UNKNOWN``) yield eight spaces.
     """
-    match = _INTL_DESIGNATOR_RE.match(object_id)
-    if match is None:
+    if (match := _INTL_DESIGNATOR_RE.match(object_id)) is None:
         return " " * 8
     year, launch, piece = match.groups()
     return f"{year[2:]}{launch}{piece.upper():<3}"
