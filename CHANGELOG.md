@@ -5,7 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-07-22
+
+### Added
+
+- `omm_to_tle` conversion from an OMM to a NORAD Two-Line Element set, returning a
+  `TLE` value object (`.line1`/`.line2`/`.name`, `str()` for the two-line form and
+  `.three_line()` for the space-track three-line form). Handles Alpha-5 satellite
+  numbers and the TLE checksum, and is verified byte-for-byte against CelesTrak's
+  published element sets.
 
 ## [0.1.0] - 2026-07-02
 
@@ -23,5 +31,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   additional formats or message types.
 - `oem_to_tracss_ocm` conversion from OEM to a TraCSS-compliant OCM.
 
-[Unreleased]: https://github.com/open-space-collective/orbit-data-messages/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/open-space-collective/orbit-data-messages/releases/tag/v0.1.0
+[Unreleased]: https://github.com/open-space-collective/ccsds-data-messages/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/open-space-collective/ccsds-data-messages/releases/tag/v0.1.0

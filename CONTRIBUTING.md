@@ -5,8 +5,8 @@
 Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/open-space-collective/orbit-data-messages
-cd orbit-data-messages
+git clone https://github.com/open-space-collective/ccsds-data-messages
+cd ccsds-data-messages
 uv sync --all-extras
 ```
 
