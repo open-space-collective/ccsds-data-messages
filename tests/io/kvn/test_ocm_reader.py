@@ -62,6 +62,56 @@ class TestKVNOCMReader:
         assert msg.trajectory_states is not None
         assert len(msg.trajectory_states) == 2
 
+    def test_read_richer_fixture_parses_multiple_covariance_blocks(self):
+        """The covariance fixture carries three COV blocks linked via COV_PREV_ID/COV_NEXT_ID."""
+        reader = KVNOCMReader()
+        msg = reader.read(FIXTURES / "ocm_g19_covariance_histories.kvn")
+        assert msg.covariances is not None
+        assert [
+            (cov.cov_id, cov.cov_prev_id, cov.cov_next_id) for cov in msg.covariances
+        ] == [
+            ("COV_001", None, "COV_002"),
+            ("COV_002", "COV_001", "COV_003"),
+            ("COV_003", "COV_002", None),
+        ]
+        assert [
+            (
+                str(cov.cov_basis),
+                str(cov.cov_ref_frame),
+                str(cov.cov_type),
+                str(cov.cov_ordering),
+                cov.cov_units,
+                len(cov.data_lines),
+            )
+            for cov in msg.covariances
+        ] == [
+            (
+                "PREDICTED",
+                "J2000",
+                "ADBARV",
+                "LTM",
+                "[deg, deg, deg, deg, km, km/s]",
+                2,
+            ),
+            # COV_ORDERING is omitted in the fixture: LTM is the table 6-6 default.
+            (
+                "PREDICTED",
+                "FIXED_EARTH",
+                "CARTP",
+                "LTM",
+                "[km, km, km]",
+                1,
+            ),
+            (
+                "DETERMINED",
+                "TNW_INERTIAL",
+                "CARTPV",
+                "LTM",
+                "[km, km, km, km/s, km/s, km/s]",
+                2,
+            ),
+        ]
+
     @pytest.mark.parametrize("fixture", _KVN_FIXTURES)
     def test_read_all_fixtures_return_ocm(self, fixture: str):
         reader = KVNOCMReader()

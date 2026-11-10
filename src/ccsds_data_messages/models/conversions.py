@@ -10,7 +10,6 @@ involved; all fields are mapped according to the CCSDS 502.0-B-3 specification.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Any
 
 from ._epoch import _normalize_epoch
@@ -30,6 +29,20 @@ from .values import OrbitalElements
 from .values import RefFrame
 
 _VALID_TRAJ_BASIS = frozenset({"OPERATIONAL", "CANDIDATE"})
+
+# OEM COV_REF_FRAME -> OCM COV_REF_FRAME. TraCSS-Spec-002 table 6 only accepts the
+# inertial orbit-relative frames TNW_INERTIAL and RSW_INERTIAL; RSW and RTN are two
+# names for the same radial/transverse/normal frame, so both map to RSW_INERTIAL.
+# The two TraCSS frames map to themselves. Any other OEM covariance frame (including
+# the segment REF_FRAME, e.g. EME2000, used when a line has no COV_REF_FRAME) is
+# rejected by oem_to_tracss_ocm.
+COV_REF_FRAME_MAPPING: dict[str, ExtendedManCovRefFrame] = {
+    ManCovRefFrame.RSW: ExtendedManCovRefFrame.RSW_INERTIAL,
+    ManCovRefFrame.RTN: ExtendedManCovRefFrame.RSW_INERTIAL,
+    ManCovRefFrame.TNW: ExtendedManCovRefFrame.TNW_INERTIAL,
+    ExtendedManCovRefFrame.RSW_INERTIAL: ExtendedManCovRefFrame.RSW_INERTIAL,
+    ExtendedManCovRefFrame.TNW_INERTIAL: ExtendedManCovRefFrame.TNW_INERTIAL,
+}
 
 # Format specs are read from the same FieldMetadata annotations that
 # io/kvn/oem_writer.py uses, so this stays in sync with the canonical OEM writer
@@ -82,19 +95,20 @@ def oem_to_tracss_ocm(
 
     Each OEM segment becomes one ``OCM.TrajectoryStateTimeHistory`` block with
     ``TRAJ_TYPE = CARTPV`` (or ``CARTPVA`` when acceleration components are
-    present). Segments that carry a covariance matrix each produce one
+    present). When the OEM carries covariance, each segment produces exactly one
     ``OCM.CovarianceTimeHistory`` block with ``COV_TYPE = CARTPV`` and
-    ``COV_ORDERING = LTM``.
+    ``COV_ORDERING = LTM``, its ``COV_REF_FRAME`` translated through
+    ``COV_REF_FRAME_MAPPING``.
 
     The OCM ``EPOCH_TZERO`` is set to the epoch of the first ephemeris data line.
     Header fields are taken from the OEM; ``OEM.validate_single_object`` (section 5.1.3)
     already guarantees every segment agrees on ``object_name`` and ``object_id``.
 
-    Covariance note: OEM permits a different ``COV_REF_FRAME`` per epoch entry
-    within one covariance block; OCM has one ``COV_REF_FRAME`` per block. Lines
-    are grouped by their effective frame and one ``CovarianceTimeHistory`` block
-    is produced per unique frame, preserving ordering. The conversion is lossless
-    even when frames are mixed.
+    Covariance note: TraCSS-Spec-002 (table 1 and section 7) pairs every orbit data
+    section with one covariance data section, line for line with identical epochs. OEM
+    covariance that cannot be expressed that way (missing in some segments, at epochs
+    other than the ephemeris epochs, or in several frames) is rejected rather than
+    split into extra blocks.
 
     All parameters marked (M) are mandatory per the TraCSS OCM spec.
 
@@ -128,6 +142,13 @@ def oem_to_tracss_ocm(
         ValueError: If any segment uses ``CENTER_NAME != EARTH``.
         ValueError: If any segment uses ``REF_FRAME != EME2000``.
         ValueError: If any segment has too few data lines to compute useable times.
+        ValueError: If only some segments carry covariance.
+        ValueError: If a segment's covariance epochs do not match its ephemeris epochs
+            one-to-one.
+        ValueError: If a covariance frame is not in ``COV_REF_FRAME_MAPPING`` (e.g. the
+            segment REF_FRAME ``EME2000`` when a line has no ``COV_REF_FRAME``).
+        ValueError: If a segment's covariance uses more than one frame, or segments use
+            different covariance frames (after ``COV_REF_FRAME_MAPPING``).
     """
     if traj_basis not in _VALID_TRAJ_BASIS:
         raise ValueError(
@@ -152,6 +173,8 @@ def oem_to_tracss_ocm(
             raise ValueError(
                 f"TraCSS requires TRAJ_REF_FRAME = EME2000; segment {i} has {seg.metadata.ref_frame!r}."
             )
+
+    cov_frames = _check_tracss_covariance_consistency(oem)
 
     header = OCM.Header(
         ccsds_ocm_vers="3.0",
@@ -183,11 +206,11 @@ def oem_to_tracss_ocm(
         useable_start_times.append(traj.useable_start_time)
         useable_stop_times.append(traj.useable_stop_time)
 
+    # One covariance block per segment (validated above), so COV_ID i pairs with TRAJ_ID i.
     raw_covariances = [
-        block
-        for seg in oem.segments
-        if seg.covariance_matrix is not None
-        for block in _segment_to_cov_blocks(seg)
+        _segment_to_cov_block(seg, cov_id=str(i + 1), cov_ref_frame=frame)
+        for i, (seg, frame) in enumerate(zip(oem.segments, cov_frames, strict=True))
+        if frame is not None
     ]
 
     elements = ["ORB"] * len(trajectory_states) + ["COV"] * len(raw_covariances)
@@ -275,40 +298,146 @@ def _segment_to_traj(
     return OCM.TrajectoryStateTimeHistory(**kwargs)
 
 
-def _segment_to_cov_blocks(seg: OEM.Segment) -> list[OCM.CovarianceTimeHistory]:
+_CovFrame = RefFrame | ManCovRefFrame | ExtendedManCovRefFrame | str
+
+
+def _segment_cov_frames(seg_index: int, seg: OEM.Segment) -> list[ExtendedManCovRefFrame]:
     """
-    Convert one OEM covariance block into one or more OCM CovarianceTimeHistory blocks.
+    Effective OCM COV_REF_FRAME of each covariance line in ``seg``, in line order.
 
-    OEM allows a different COV_REF_FRAME per epoch entry within a single covariance block;
-    OCM has one COV_REF_FRAME per block. Lines are grouped by their effective frame (using the
-    segment REF_FRAME for entries where COV_REF_FRAME is absent) and one OCM block is produced
-    per unique frame, preserving ordering within each group.
+    A line without its own COV_REF_FRAME uses the segment REF_FRAME; every frame is then
+    translated through ``COV_REF_FRAME_MAPPING``.
+
+    Raises:
+        ValueError: If a line's frame is not a key of ``COV_REF_FRAME_MAPPING``.
     """
-    fallback_frame: RefFrame | str = seg.metadata.ref_frame
+    assert seg.covariance_matrix is not None  # noqa: S101 (callers check this first)
+    frames: list[ExtendedManCovRefFrame] = []
+    for line_index, line in enumerate(seg.covariance_matrix.covariance_matrix_lines):
+        if line.cov_ref_frame is not None:
+            oem_frame, source = line.cov_ref_frame, "its COV_REF_FRAME"
+        else:
+            oem_frame, source = (
+                seg.metadata.ref_frame,
+                "the segment REF_FRAME (no COV_REF_FRAME)",
+            )
+        if (ocm_frame := COV_REF_FRAME_MAPPING.get(oem_frame)) is None:
+            supported = ", ".join(
+                f"{oem} -> {ocm}" for oem, ocm in COV_REF_FRAME_MAPPING.items()
+            )
+            raise ValueError(
+                f"Segment {seg_index} covariance line {line_index} "
+                f"(epoch {line.epoch}) uses frame {str(oem_frame)!r} from {source}, "
+                "which cannot be mapped to a TraCSS covariance frame "
+                "(TraCSS-Spec-002 table 6 accepts RSW_INERTIAL or TNW_INERTIAL). "
+                f"Supported OEM covariance frames: {supported}."
+            )
+        frames.append(ocm_frame)
+    return frames
 
-    groups: defaultdict[
-        RefFrame | ManCovRefFrame | ExtendedManCovRefFrame | str,
-        list[OEM.Segment.CovarianceMatrix.CovarianceMatrixLines],
-    ] = defaultdict(list)
-    order: list[RefFrame | ManCovRefFrame | ExtendedManCovRefFrame | str] = []
 
-    assert seg.covariance_matrix is not None  # noqa: S101 (caller filters this; see call site)
-    for line in seg.covariance_matrix.covariance_matrix_lines:
-        frame = line.cov_ref_frame if line.cov_ref_frame is not None else fallback_frame
-        if frame not in groups:
-            order.append(frame)
-        groups[frame].append(line)
+def _check_tracss_covariance_consistency(oem: OEM) -> list[_CovFrame | None]:
+    """
+    Enforce the TraCSS-Spec-002 pairing rules between orbit and covariance data.
 
-    return [
-        OCM.CovarianceTimeHistory(
-            cov_ref_frame=frame,
-            cov_type=OrbitalElements.CARTPV,
-            cov_ordering=CovarianceOrdering.LTM,
-            cov_units=_COV_UNITS[OrbitalElements.CARTPV],
-            data_lines=[_format_cov_line(line) for line in groups[frame]],
-        )
-        for frame in order
+    - Table 1: if covariance is provided, there is one covariance section per orbit data
+      section, covering the same time span - so either every segment has covariance or
+      none does.
+    - Section 7: one-to-one correspondence between orbit and covariance lines within each
+      pair of sections, with identical epochs.
+    - Table 6: one COV_REF_FRAME per covariance section, so each segment's covariance must
+      resolve to a single frame (after ``COV_REF_FRAME_MAPPING``). All segments must also
+      agree on that frame, so the message has one consistent covariance frame.
+
+    Returns:
+        The (mapped) covariance frame of each segment, or ``None`` per segment when the
+        OEM carries no covariance at all.
+    """
+    with_cov = [
+        i for i, seg in enumerate(oem.segments) if seg.covariance_matrix is not None
     ]
+    if not with_cov:
+        return [None] * len(oem.segments)
+    if len(with_cov) != len(oem.segments):
+        without_cov = sorted(set(range(len(oem.segments))) - set(with_cov))
+        raise ValueError(
+            "TraCSS requires one covariance section per orbit data section (table 1): "
+            f"segments {with_cov} have covariance but segments {without_cov} do not."
+        )
+
+    seg_frames: list[_CovFrame | None] = []
+    for i, seg in enumerate(oem.segments):
+        assert seg.covariance_matrix is not None  # noqa: S101 (checked above)
+        eph_epochs = [
+            _normalize_epoch(line.epoch)
+            for line in seg.ephemeris_data.ephemeris_data_lines
+        ]
+        cov_epochs = [
+            _normalize_epoch(line.epoch)
+            for line in seg.covariance_matrix.covariance_matrix_lines
+        ]
+        if len(cov_epochs) != len(eph_epochs):
+            raise ValueError(
+                "TraCSS requires one covariance line per orbit data line (section 7); "
+                f"segment {i} has {len(cov_epochs)} covariance lines for "
+                f"{len(eph_epochs)} ephemeris lines."
+            )
+        if cov_epochs != eph_epochs:
+            mismatch = next(
+                k
+                for k, (c, e) in enumerate(zip(cov_epochs, eph_epochs, strict=True))
+                if c != e
+            )
+            raise ValueError(
+                "TraCSS requires covariance and orbit data lines to have identical epochs "
+                f"(section 7); segment {i} line {mismatch} has covariance epoch "
+                f"{seg.covariance_matrix.covariance_matrix_lines[mismatch].epoch!r} but "
+                f"ephemeris epoch {seg.ephemeris_data.ephemeris_data_lines[mismatch].epoch!r}."
+            )
+
+        frames = set(_segment_cov_frames(i, seg))
+        if len(frames) != 1:
+            raise ValueError(
+                "TraCSS allows one COV_REF_FRAME per covariance section (table 6); "
+                f"segment {i} mixes covariance frames {sorted(map(str, frames))}."
+            )
+        seg_frames.append(frames.pop())
+
+    if len(set(seg_frames)) != 1:
+        raise ValueError(
+            "All segments must use the same covariance frame; got "
+            f"{[str(f) for f in seg_frames]} for segments 0..{len(seg_frames) - 1}."
+        )
+    return seg_frames
+
+
+def _segment_to_cov_block(
+    seg: OEM.Segment,
+    cov_id: str,
+    cov_ref_frame: _CovFrame,
+) -> OCM.CovarianceTimeHistory:
+    """
+    Convert one OEM segment's covariance into a single OCM CovarianceTimeHistory block.
+
+    The caller has already checked the segment against the TraCSS pairing rules
+    (``_check_tracss_covariance_consistency``) and resolved its single, mapped frame.
+
+    Note: the frame is only relabelled. Going from a rotating frame (RSW/RTN, TNW) to its
+    inertial counterpart leaves the position terms unchanged but, strictly, changes the
+    velocity terms by the omega x r contribution, which is not applied here.
+    """
+    assert seg.covariance_matrix is not None  # noqa: S101 (caller filters this; see call site)
+    return OCM.CovarianceTimeHistory(
+        cov_id=cov_id,
+        cov_ref_frame=cov_ref_frame,
+        cov_type=OrbitalElements.CARTPV,
+        cov_ordering=CovarianceOrdering.LTM,
+        cov_units=_COV_UNITS[OrbitalElements.CARTPV],
+        data_lines=[
+            _format_cov_line(line)
+            for line in seg.covariance_matrix.covariance_matrix_lines
+        ],
+    )
 
 
 def _format_ephemeris_line(line: OEM.Segment.EphemerisData.EphemerisDataLine) -> str:
