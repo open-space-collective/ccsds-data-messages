@@ -13,4 +13,3 @@
 ## Checklist
 
 - [ ] Spec-compliance change has a fixture test against an Annex G example
-- [ ] `docs/gaps.md` updated if a tracked gap is closed
