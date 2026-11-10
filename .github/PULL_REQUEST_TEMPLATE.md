@@ -1,10 +1,10 @@
-## What
-
-<!-- One sentence: what does this change? -->
-
 ## Why
 
 <!-- What problem does it solve, or which gap in docs/gaps.md does it address? -->
+
+## What
+
+<!-- One sentence: what does this change, if its not self explanatory from the code? -->
 
 ## Spec reference
 
