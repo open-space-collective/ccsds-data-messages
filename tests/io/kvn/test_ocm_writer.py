@@ -12,10 +12,12 @@ Module under test:
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from conftest import make_ocm
 from conftest import make_ocm_with_trajectory
+from conftest import make_ocm_with_trajectory_and_covariance_blocks
 
 from ccsds_data_messages import OCM
 from ccsds_data_messages.io.kvn.ocm_reader import KVNOCMReader
@@ -63,6 +65,85 @@ class TestKVNOCMWriter:
         assert (
             back.trajectory_states[0].data_lines == model.trajectory_states[0].data_lines
         )
+
+    def test_write_roundtrips_trajectory_and_covariance_blocks(self, tmp_path: Path):
+        """TRAJ_* and COV_* block IDs and per-block keywords are written and read back."""
+        writer = KVNOCMWriter()
+        model = make_ocm_with_trajectory_and_covariance_blocks()
+        path = tmp_path / "out_traj_cov.ocm"
+        writer.write(model, path)
+
+        # The ID keywords must be present in the KVN text itself, not just survive
+        # a round trip (a writer/reader pair agreeing on a wrong keyword would pass).
+        text = path.read_text(encoding="utf-8")
+        for keyword, value in [
+            ("TRAJ_ID", "TRAJ_001"),
+            ("TRAJ_NEXT_ID", "TRAJ_002"),
+            ("TRAJ_ID", "TRAJ_002"),
+            ("TRAJ_PREV_ID", "TRAJ_001"),
+            ("COV_ID", "COV_001"),
+            ("COV_NEXT_ID", "COV_002"),
+            ("COV_ID", "COV_002"),
+            ("COV_PREV_ID", "COV_001"),
+        ]:
+            assert re.search(rf"^\s*{keyword}\s*=\s*{value}\s*$", text, re.MULTILINE), (
+                f"{keyword} = {value} not found in written KVN"
+            )
+
+        back = KVNOCMReader().read(path)
+        assert back.trajectory_states is not None
+        assert [
+            (
+                traj.traj_id,
+                traj.traj_prev_id,
+                traj.traj_next_id,
+                str(traj.traj_basis),
+                str(traj.traj_ref_frame),
+                str(traj.traj_type),
+                traj.data_lines,
+            )
+            for traj in back.trajectory_states
+        ] == [
+            (
+                traj.traj_id,
+                traj.traj_prev_id,
+                traj.traj_next_id,
+                str(traj.traj_basis),
+                str(traj.traj_ref_frame),
+                str(traj.traj_type),
+                traj.data_lines,
+            )
+            for traj in model.trajectory_states
+        ]
+
+        assert back.covariances is not None
+        assert [
+            (
+                cov.cov_id,
+                cov.cov_prev_id,
+                cov.cov_next_id,
+                str(cov.cov_basis),
+                str(cov.cov_ref_frame),
+                str(cov.cov_type),
+                str(cov.cov_ordering),
+                cov.cov_units,
+                cov.data_lines,
+            )
+            for cov in back.covariances
+        ] == [
+            (
+                cov.cov_id,
+                cov.cov_prev_id,
+                cov.cov_next_id,
+                str(cov.cov_basis),
+                str(cov.cov_ref_frame),
+                str(cov.cov_type),
+                str(cov.cov_ordering),
+                cov.cov_units,
+                cov.data_lines,
+            )
+            for cov in model.covariances
+        ]
 
     def test_write_with_explicit_options(self, tmp_path: Path):
         """An explicit WriterOptions is accepted and still round-trips."""
