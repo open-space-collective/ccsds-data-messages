@@ -202,6 +202,78 @@ def make_ocm_with_trajectory() -> OCM:
     return base.model_copy(update={"trajectory_states": [traj]})
 
 
+def make_ocm_with_trajectory_and_covariance_blocks() -> OCM:
+    """
+    An OCM with two trajectory blocks and two covariance blocks.
+
+    Each block carries an ID linked to its neighbour via *_PREV_ID / *_NEXT_ID, and
+    the blocks differ in basis, frame and type so field mix-ups between blocks show up.
+    """
+    base = make_ocm(metadata={"object_name": "TESTSAT"})
+    trajectory_states = [
+        OCM.TrajectoryStateTimeHistory(
+            traj_id="TRAJ_001",
+            traj_next_id="TRAJ_002",
+            traj_basis="PREDICTED",
+            center_name="EARTH",
+            traj_ref_frame="ITRF2000",
+            traj_type="CARTPV",
+            data_lines=[
+                "0.0 2854.5 -2916.2 -5360.7 5.90 4.86 0.52",
+                "120.0 5478.6 434.3 -3862.5 2.50 5.87 4.29",
+            ],
+        ),
+        OCM.TrajectoryStateTimeHistory(
+            traj_id="TRAJ_002",
+            traj_prev_id="TRAJ_001",
+            traj_basis="DETERMINED",
+            center_name="EARTH",
+            traj_ref_frame="EME2000",
+            traj_type="CARTPVA",
+            data_lines=[
+                "240.0 4146.0 -1655.8 -5038.3 4.80 5.58 2.16 0.0054 -0.0022 -0.0066",
+                "360.0 1553.4 -4848.7 -4406.5 6.73 1.01 -3.53 -0.002 -0.0063 -0.0058",
+                "480.0 -1553.4 -4848.7 -4406.5 6.73 1.01 -3.53 -0.002 -0.0063 -0.0058",
+            ],
+        ),
+    ]
+    covariances = [
+        OCM.CovarianceTimeHistory(
+            cov_id="COV_001",
+            cov_next_id="COV_002",
+            cov_basis="PREDICTED",
+            cov_ref_frame="TNW_INERTIAL",
+            cov_type="CARTPV",
+            cov_ordering="LTM",
+            cov_units="[km,km,km,km/s,km/s,km/s]",
+            data_lines=[
+                "0.0 4.0e-04 1.0e-05 9.0e-04 2.0e-06 3.0e-06 2.5e-04"
+                " -1.0e-08 2.0e-09 1.0e-09 4.0e-10 1.0e-09 -2.0e-08 3.0e-09 1.0e-11 9.0e-10"
+                " 5.0e-10 1.0e-09 -1.0e-08 2.0e-12 3.0e-12 2.5e-10",
+                "120.0 4.2e-04 1.1e-05 9.3e-04 2.1e-06 3.2e-06 2.6e-04"
+                " -1.1e-08 2.1e-09 1.1e-09 4.2e-10 1.1e-09 -2.1e-08 3.1e-09 1.1e-11 9.3e-10"
+                " 5.2e-10 1.1e-09 -1.1e-08 2.1e-12 3.1e-12 2.6e-10",
+            ],
+        ),
+        OCM.CovarianceTimeHistory(
+            cov_id="COV_002",
+            cov_prev_id="COV_001",
+            cov_basis="DETERMINED",
+            cov_ref_frame="RSW_INERTIAL",
+            cov_type="CARTP",
+            cov_ordering="LTM",
+            cov_units="[km,km,km]",
+            data_lines=["240.0 4.0e-04 1.0e-05 9.0e-04 2.0e-06 3.0e-06 2.5e-04"],
+        ),
+    ]
+    return OCM(
+        header=base.header,
+        metadata=base.metadata,
+        trajectory_states=trajectory_states,
+        covariances=covariances,
+    )
+
+
 # OMM builder helpers
 # -------------------
 OMM_BASE_METADATA_KW: dict[str, Any] = {

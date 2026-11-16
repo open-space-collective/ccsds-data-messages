@@ -64,6 +64,55 @@ class TestXMLOCMReader:
         from_string = XMLOCMReader().read_string(content)
         assert from_path.model_dump() == from_string.model_dump()
 
+    def test_read_spec_fixture_g19_parses_multiple_covariance_blocks(self):
+        """XML twin of the KVN g19 fixture: three COV blocks linked via COV_PREV_ID/COV_NEXT_ID."""
+        msg = XMLOCMReader().read(FIXTURES / "ocm_g19_covariance_histories.xml")
+        assert msg.covariances is not None
+        assert [
+            (cov.cov_id, cov.cov_prev_id, cov.cov_next_id) for cov in msg.covariances
+        ] == [
+            ("COV_001", None, "COV_002"),
+            ("COV_002", "COV_001", "COV_003"),
+            ("COV_003", "COV_002", None),
+        ]
+        assert [
+            (
+                str(cov.cov_basis),
+                str(cov.cov_ref_frame),
+                str(cov.cov_type),
+                str(cov.cov_ordering),
+                cov.cov_units,
+                len(cov.data_lines),
+            )
+            for cov in msg.covariances
+        ] == [
+            (
+                "PREDICTED",
+                "J2000",
+                "ADBARV",
+                "LTM",
+                "[deg, deg, deg, deg, km, km/s]",
+                2,
+            ),
+            # COV_ORDERING is omitted in the fixture: LTM is the table 6-6 default.
+            (
+                "PREDICTED",
+                "FIXED_EARTH",
+                "CARTP",
+                "LTM",
+                "[km, km, km]",
+                1,
+            ),
+            (
+                "DETERMINED",
+                "TNW_INERTIAL",
+                "CARTPV",
+                "LTM",
+                "[km, km, km, km/s, km/s, km/s]",
+                2,
+            ),
+        ]
+
     def test_read_spec_fixture_g20(self):
         """The g20 spec fixture parses, including its <USER_DEFINED parameter=...> block."""
         msg = XMLOCMReader().read(FIXTURES / "ocm_g20.xml")

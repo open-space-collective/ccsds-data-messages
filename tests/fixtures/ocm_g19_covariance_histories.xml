@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ocm  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://sanaregistry.org/r/ndmxml_unqualified/ndmxml-3.0.0-master-3.0.xsd"
+      id="CCSDS_OCM_VERS" version="3.0">
+  <header>
+    <CREATION_DATE>2022-11-06T09:23:57</CREATION_DATE>
+    <ORIGINATOR>JAXA</ORIGINATOR>
+  </header>
+  <body>
+    <segment>
+      <metadata>
+        <OBJECT_NAME>OSPREY 5</OBJECT_NAME>
+        <INTERNATIONAL_DESIGNATOR>2022-999A</INTERNATIONAL_DESIGNATOR>
+        <TIME_SYSTEM>UTC</TIME_SYSTEM>
+        <EPOCH_TZERO>2022-12-18T14:28:15.1172</EPOCH_TZERO>
+      </metadata>
+      <data>
+        <traj>
+          <COMMENT>GEOCENTRIC, CARTESIAN, EARTH FIXED</COMMENT>
+          <TRAJ_BASIS>PREDICTED</TRAJ_BASIS>
+          <CENTER_NAME>EARTH</CENTER_NAME>
+          <TRAJ_REF_FRAME>TOD_EARTH</TRAJ_REF_FRAME>
+          <TRAJ_FRAME_EPOCH>2022-12-18T14:28:15.1172</TRAJ_FRAME_EPOCH>
+          <TRAJ_TYPE>CARTPVA</TRAJ_TYPE>
+          <trajLine>0.0 2854.5 -2916.2 -5360.7 5.90 4.86 0.52 0.0037 -0.0038 -0.0070</trajLine>
+          <trajLine>120.0 5478.6 434.3 -3862.5 2.50 5.87 4.29 0.0072 0.0006 -0.0051</trajLine>
+          <trajLine>240.0 4146.0 -1655.8 -5038.3 4.80 5.58 2.16 0.0054 -0.0022 -0.0066</trajLine>
+          <trajLine>86400 -1553.4 -4848.7 -4406.5 6.73 1.01 -3.53 -0.002 -0.0063 -0.0058</trajLine>
+        </traj>
+        <phys>
+          <COMMENT>Spacecraft Physical Characteristics:</COMMENT>
+          <DRAG_CONST_AREA units="m**2">10.000</DRAG_CONST_AREA>
+          <DRAG_COEFF_NOM>2.300</DRAG_COEFF_NOM>
+          <WET_MASS units="kg">1913.000</WET_MASS>
+          <SRP_CONST_AREA units="m**2">10.000</SRP_CONST_AREA>
+          <SOLAR_RAD_COEFF>1.300</SOLAR_RAD_COEFF>
+        </phys>
+        <cov>
+          <COV_ID>COV_001</COV_ID>
+          <COV_NEXT_ID>COV_002</COV_NEXT_ID>
+          <COV_BASIS>PREDICTED</COV_BASIS>
+          <COV_REF_FRAME>J2000</COV_REF_FRAME>
+          <COV_TYPE>ADBARV</COV_TYPE>
+          <COV_ORDERING>LTM</COV_ORDERING>
+          <COV_UNITS>[deg, deg, deg, deg, km, km/s]</COV_UNITS>
+          <covLine>10.00 3.331349e-04 4.618927e-04 6.782421e-04 -3.070007e-04 -4.221234e-04 3.231931e-04 -3.349365e-07 -4.686084e-07 2.484949e-07 4.296022e-10 -2.211832e-07 -2.864186e-07 1.798098e-07 2.608899e-10 1.767514e-10 -3.041346e-07 -4.989496e-07 3.540310e-07 1.869263e-10 1.008862e-10 6.224444e-10</covLine>
+          <covLine>20.0 3.442450e-04 4.507816e-04 6.893532e-04 -3.060006e-04 -4.110123e-04 3.342042e-04 -3.238254e-07 -4.575073e-07 2.373838e-07 4.307133e-10 -2.100721e-07 -2.753075e-07 1.687087e-07 2.507788e-10 1.878625e-10 -3.030235e-07 -4.878385e-07 3.430200e-07 1.758152e-10 1.007751e-10 6.224444e-10</covLine>
+        </cov>
+        <cov>
+          <COV_ID>COV_002</COV_ID>
+          <COV_PREV_ID>COV_001</COV_PREV_ID>
+          <COV_NEXT_ID>COV_003</COV_NEXT_ID>
+          <COV_BASIS>PREDICTED</COV_BASIS>
+          <COV_REF_FRAME>FIXED_EARTH</COV_REF_FRAME>
+          <COV_TYPE>CARTP</COV_TYPE>
+          <COV_UNITS>[km, km, km]</COV_UNITS>
+          <covLine>2022-12-18T14:31:35.1172 3.331349e-04 4.618927e-04 6.782421e-04 -3.070007e-04 -4.221234e-04 3.231931e-04</covLine>
+        </cov>
+        <cov>
+          <COV_ID>COV_003</COV_ID>
+          <COV_PREV_ID>COV_002</COV_PREV_ID>
+          <COV_BASIS>DETERMINED</COV_BASIS>
+          <COV_REF_FRAME>TNW_INERTIAL</COV_REF_FRAME>
+          <COV_TYPE>CARTPV</COV_TYPE>
+          <COV_ORDERING>LTM</COV_ORDERING>
+          <COV_UNITS>[km, km, km, km/s, km/s, km/s]</COV_UNITS>
+          <covLine>2022-12-18T14:33:15.1172 4.000000e-04 1.000000e-05 9.000000e-04 2.000000e-06 3.000000e-06 2.500000e-04 -1.000000e-08 2.000000e-09 1.000000e-09 4.000000e-10 1.000000e-09 -2.000000e-08 3.000000e-09 1.000000e-11 9.000000e-10 5.000000e-10 1.000000e-09 -1.000000e-08 2.000000e-12 3.000000e-12 2.500000e-10</covLine>
+          <covLine>2022-12-18T14:35:15.1172 4.200000e-04 1.100000e-05 9.300000e-04 2.100000e-06 3.200000e-06 2.600000e-04 -1.100000e-08 2.100000e-09 1.100000e-09 4.200000e-10 1.100000e-09 -2.100000e-08 3.100000e-09 1.100000e-11 9.300000e-10 5.200000e-10 1.100000e-09 -1.100000e-08 2.100000e-12 3.100000e-12 2.600000e-10</covLine>
+        </cov>
+        <pert>
+          <COMMENT>Perturbations specification</COMMENT>
+          <GM units="km**3/s**2">398600.4415</GM>
+        </pert>
+      </data>
+    </segment>
+  </body>
+</ocm>

@@ -12,10 +12,12 @@ Module under test:
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET  # noqa: S405
 from typing import TYPE_CHECKING
 
 from conftest import make_ocm
 from conftest import make_ocm_with_trajectory
+from conftest import make_ocm_with_trajectory_and_covariance_blocks
 
 from ccsds_data_messages import OCM
 from ccsds_data_messages.io.options import WriterOptions
@@ -54,6 +56,85 @@ class TestXMLOCMWriter:
         assert (
             back.trajectory_states[0].data_lines == model.trajectory_states[0].data_lines
         )
+
+    def test_write_roundtrips_trajectory_and_covariance_blocks(self, tmp_path: Path):
+        """TRAJ_* and COV_* block IDs and per-block keywords are written and read back."""
+        writer = XMLOCMWriter()
+        model = make_ocm_with_trajectory_and_covariance_blocks()
+        path = tmp_path / "out_traj_cov.xml"
+        writer.write(model, path)
+
+        # The ID elements must be present in the XML itself, inside the right block, not
+        # just survive a round trip (a writer/reader pair agreeing on a wrong tag would pass).
+        data = ET.parse(path).getroot().find("body/segment/data")  # noqa: S314
+        assert data is not None
+        assert [
+            (
+                b.findtext("TRAJ_ID"),
+                b.findtext("TRAJ_PREV_ID"),
+                b.findtext("TRAJ_NEXT_ID"),
+            )
+            for b in data.findall("traj")
+        ] == [("TRAJ_001", None, "TRAJ_002"), ("TRAJ_002", "TRAJ_001", None)]
+        assert [
+            (b.findtext("COV_ID"), b.findtext("COV_PREV_ID"), b.findtext("COV_NEXT_ID"))
+            for b in data.findall("cov")
+        ] == [("COV_001", None, "COV_002"), ("COV_002", "COV_001", None)]
+
+        back = XMLOCMReader().read(path)
+        assert back.trajectory_states is not None
+        assert [
+            (
+                traj.traj_id,
+                traj.traj_prev_id,
+                traj.traj_next_id,
+                str(traj.traj_basis),
+                str(traj.traj_ref_frame),
+                str(traj.traj_type),
+                traj.data_lines,
+            )
+            for traj in back.trajectory_states
+        ] == [
+            (
+                traj.traj_id,
+                traj.traj_prev_id,
+                traj.traj_next_id,
+                str(traj.traj_basis),
+                str(traj.traj_ref_frame),
+                str(traj.traj_type),
+                traj.data_lines,
+            )
+            for traj in model.trajectory_states
+        ]
+
+        assert back.covariances is not None
+        assert [
+            (
+                cov.cov_id,
+                cov.cov_prev_id,
+                cov.cov_next_id,
+                str(cov.cov_basis),
+                str(cov.cov_ref_frame),
+                str(cov.cov_type),
+                str(cov.cov_ordering),
+                cov.cov_units,
+                cov.data_lines,
+            )
+            for cov in back.covariances
+        ] == [
+            (
+                cov.cov_id,
+                cov.cov_prev_id,
+                cov.cov_next_id,
+                str(cov.cov_basis),
+                str(cov.cov_ref_frame),
+                str(cov.cov_type),
+                str(cov.cov_ordering),
+                cov.cov_units,
+                cov.data_lines,
+            )
+            for cov in model.covariances
+        ]
 
     def test_write_with_explicit_options(self, tmp_path: Path):
         """An explicit WriterOptions is accepted and still round-trips."""

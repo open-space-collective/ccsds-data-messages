@@ -112,8 +112,41 @@ write(msg, "output.xml", options=WriterOptions(include_units=False))
 write(msg, "output.oem", options=WriterOptions(float_formats={"X": " .6f", "Y": " .6f"}))
 ```
 
-## Running tests
+## Developers
+
+Tooling is managed with [uv](https://docs.astral.sh/uv/).
+
+### Dev container
+
+The dev container needs only Docker on the host. It runs as your host user, mounts the repository at `/workspace` so edits are visible both ways, and mounts your `~/.gitconfig` and `~/.ssh` read-only.
 
 ```bash
-pytest
+make dev-image   # build the image (ccsds-data-messages:dev)
+make dev         # build if needed, then open a bash shell in the container
+```
+
+To use a different Python version, pass `PYTHON_VERSION`, e.g. `make dev PYTHON_VERSION=3.12`.
+
+### Running tests
+
+Run the full suite (same as CI, with an 80% coverage gate):
+
+```bash
+make test        # or: uv run pytest
+```
+
+Run a single file, class, or test. Add `--no-cov` because the coverage gate applies to the whole package and fails on a partial run:
+
+```bash
+uv run pytest tests/models/test_conversions.py --no-cov
+uv run pytest tests/models/test_conversions.py::TestOemToTracsSOcm --no-cov
+uv run pytest tests/models/test_conversions.py::TestOemToTracsSOcm::test_cartpv_data_line_format --no-cov
+uv run pytest -k "covariance" --no-cov   # tests whose name matches an expression
+```
+
+### Style
+
+```bash
+make format  # runs formatting
+make lint  # checks format
 ```
